@@ -23,8 +23,6 @@ extern "C" {
 #include <string.h>
 //#include <compiler.h>
 
-#include <stm32f4xx_hal.h>
-
 #define EVB1000_LED_SUPPORT 0
 #define EVB1000_LCD_SUPPORT 0
 
@@ -146,7 +144,7 @@ typedef enum
  *
  *******************************************************************************/
 
-int usleep(useconds_t usec);
+//int usleep(useconds_t usec);
 
 void Sleep(uint32_t Delay);
 unsigned long portGetTickCnt(void);
@@ -181,14 +179,14 @@ void port_LCD_RS_clear(void);
 void port_LCD_RW_set(void);
 void port_LCD_RW_clear(void);
 
-ITStatus EXTI_GetITEnStatus(IRQn_Type x);
+//ITStatus EXTI_GetITEnStatus(IRQn_Type x);
 
 uint32_t port_GetEXT_IRQStatus(void);
 uint32_t port_CheckEXT_IRQ(void);
 void port_DisableEXT_IRQ(void);
 void port_EnableEXT_IRQ(void);
 extern uint32_t     HAL_GetTick(void);
-HAL_StatusTypeDef   flush_report_buff(void);
+//HAL_StatusTypeDef   flush_report_buff(void);
 
 /*! ------------------------------------------------------------------------------------------------------------------
 * @fn wakeup_device_with_io()
