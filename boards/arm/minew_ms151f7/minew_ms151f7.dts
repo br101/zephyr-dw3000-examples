@@ -1,0 +1,69 @@
+// Copyright (c) 2022 Nordic Semiconductor ASA
+// SPDX-License-Identifier: Apache-2.0
+
+/dts-v1/;
+#include <nordic/nrf52833_qiaa.dtsi>
+
+/ {
+	model = "minew_ms151f7";
+	compatible = "minew,minew-ms151f7";
+
+	chosen {
+		zephyr,sram = &sram0;
+		zephyr,flash = &flash0;
+		zephyr,code-partition = &slot0_partition;
+	};
+};
+
+&flash0 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		boot_partition: partition@0 {
+			label = "mcuboot";
+			reg = <0x0 0xc000>;
+		};
+		slot0_partition: partition@c000 {
+			label = "image-0";
+			reg = <0xc000 0x32000>;
+		};
+		slot1_partition: partition@3e000 {
+			label = "image-1";
+			reg = <0x3e000 0x32000>;
+		};
+		scratch_partition: partition@70000 {
+			label = "image-scratch";
+			reg = <0x70000 0xa000>;
+		};
+		storage_partition: partition@7a000 {
+			label = "storage";
+			reg = <0x7a000 0x6000>;
+		};
+	};
+};
+
+&gpio0 {
+	status = "okay";
+};
+
+&spi0 {
+	status = "okay";
+	sck-pin = <2>;
+	mosi-pin = <20>;
+	miso-pin = <3>;
+	cs-gpios = <&gpio0 17 GPIO_ACTIVE_LOW>;
+
+	dw3000@0 {
+		compatible = "decawave,dw3000";
+		label = "DW3000";
+		spi-max-frequency = <1000000>;
+		reg = <0>;
+		reset-gpios = <&gpio0 9 GPIO_ACTIVE_LOW>;
+		irq-gpios = <&gpio0 15 GPIO_ACTIVE_LOW>;
+		wakeup-gpios = <&gpio0 1 GPIO_ACTIVE_LOW>;
+		spi-pol-gpios = <&gpio0 0 GPIO_ACTIVE_LOW>;
+		spi-pha-gpios = <&gpio0 0 GPIO_ACTIVE_LOW>;
+	};
+};
