@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014 Wind River Systems, Inc.
+ * Copyright (c) 2022 Bruno Randolf <br1@einfach.org>
  *
  * SPDX-License-Identifier: Apache-2.0
  */
