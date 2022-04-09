@@ -10,7 +10,10 @@ project(dw3000-examples)
 
 target_sources(app PRIVATE src/main.c)
 
-add_definitions(-DTEST_READING_DEV_ID)
+target_sources(app PRIVATE platform/port.c)
+
+#add_definitions(-DTEST_READING_DEV_ID)
+add_definitions(-DTEST_SIMPLE_RX)
 
 FILE(GLOB ex_sources examples/*/*.c)
 target_sources(app PRIVATE ${ex_sources})
