@@ -1,0 +1,3 @@
+[submodule "dw3000-decadriver"]
+	path = dw3000-decadriver
+	url = git@github.com:br101/zephyr-dw3000-decadriver.git
