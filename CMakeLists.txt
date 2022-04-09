@@ -59,7 +59,7 @@ add_definitions(-DTEST_READING_DEV_ID)
 
 target_sources(app PRIVATE src/main.c)
 
-target_sources(app PRIVATE platform/port.c)
+target_sources(app PRIVATE platform/port.c platform/config_options.c)
 
 FILE(GLOB ex_sources examples/*/*.c)
 target_sources(app PRIVATE ${ex_sources})
