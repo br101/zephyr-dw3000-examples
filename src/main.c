@@ -25,5 +25,9 @@ void main(void)
 	dw3000_hw_reset();
 
 	build_examples();
-	example_pointer();
+	if (example_pointer != NULL) {
+		example_pointer();
+	} else {
+		printk("NO EXAMPLE COMPILED IN\n");
+	}
 }
