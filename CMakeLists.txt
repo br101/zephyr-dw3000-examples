@@ -8,8 +8,15 @@ list(APPEND ZEPHYR_EXTRA_MODULES ${CMAKE_CURRENT_SOURCE_DIR}/dw3000-decadriver/)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(dw3000-examples)
 
-## example selection (select one)
-add_definitions(-DTEST_READING_DEV_ID)
+## example selection (select one of below) by calling cmake -DEXAMPLE=NAME
+## or by uncommenting ONE add_definitions() below
+if (DEFINED EXAMPLE)
+	add_definitions(-DTEST_${EXAMPLE})
+else()
+	add_definitions(-DTEST_READING_DEV_ID)
+endif()
+
+#add_definitions(-DTEST_READING_DEV_ID)
 #add_definitions(-DTEST_SIMPLE_TX)
 #add_definitions(-DTEST_SIMPLE_TX_PDOA)
 #add_definitions(-DTEST_SIMPLE_RX)
