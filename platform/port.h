@@ -26,7 +26,7 @@
 #define TRUE 1
 #endif
 
-#if CONFIG_SOC_NRF52840_QIAA
+#if CONFIG_SOC_SERIES_NRF52X
 #define NRF52840_XXAA
 #endif
 
