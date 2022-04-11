@@ -62,8 +62,8 @@
 		reg = <0>;
 		reset-gpios = <&gpio0 9 GPIO_ACTIVE_LOW>;
 		irq-gpios = <&gpio0 15 GPIO_ACTIVE_LOW>;
-		wakeup-gpios = <&gpio0 1 GPIO_ACTIVE_LOW>;
-		spi-pol-gpios = <&gpio0 0 GPIO_ACTIVE_LOW>;
-		spi-pha-gpios = <&gpio0 0 GPIO_ACTIVE_LOW>;
+		//wakeup-gpios = <&gpio0 1 GPIO_ACTIVE_LOW>;
+		//spi-pol-gpios = <&gpio0 0 GPIO_ACTIVE_LOW>;
+		//spi-pha-gpios = <&gpio0 0 GPIO_ACTIVE_LOW>;
 	};
 };
