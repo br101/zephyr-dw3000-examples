@@ -27,3 +27,8 @@ void port_set_dw_ic_spi_fastrate(void)
 {
 	dw3000_spi_speed_fast();
 }
+
+void port_set_dwic_isr(port_deca_isr_t deca_isr)
+{
+	dw3000_set_isr(deca_isr);
+}

@@ -26,12 +26,19 @@
 #define TRUE 1
 #endif
 
-// this define is used in some examples, should depend on board
+#if CONFIG_SOC_NRF52840_QIAA
 #define NRF52840_XXAA
+#endif
+
+#define UNUSED(X) (void)X
+#define UNUSED_PARAMETER(X) (void)X
+
+typedef void (*port_deca_isr_t)(void);
 
 void Sleep(uint32_t Delay);
 void reset_DWIC(void);
 void port_set_dw_ic_spi_slowrate(void);
 void port_set_dw_ic_spi_fastrate(void);
+void port_set_dwic_isr(port_deca_isr_t deca_isr);
 
 #endif /* PORT_H_ */
