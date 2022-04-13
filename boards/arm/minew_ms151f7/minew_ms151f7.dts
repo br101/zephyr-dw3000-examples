@@ -48,6 +48,10 @@
 	status = "okay";
 };
 
+&gpio1 {
+	status = "okay";
+};
+
 &spi0 {
 	status = "okay";
 	sck-pin = <2>;
@@ -60,7 +64,7 @@
 		label = "DW3000";
 		spi-max-frequency = <1000000>;
 		reg = <0>;
-		reset-gpios = <&gpio0 9 GPIO_ACTIVE_LOW>;
+		reset-gpios = <&gpio1 9 GPIO_ACTIVE_LOW>;
 		irq-gpios = <&gpio0 15 GPIO_ACTIVE_LOW>;
 		//wakeup-gpios = <&gpio0 1 GPIO_ACTIVE_LOW>;
 		//spi-pol-gpios = <&gpio0 0 GPIO_ACTIVE_LOW>;
