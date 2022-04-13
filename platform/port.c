@@ -11,11 +11,13 @@ void Sleep(uint32_t x)
 
 void reset_DWIC(void)
 {
+#if 0
+	dw3000_hw_reset();
+#else
 	dw3000_spi_speed_slow();
-
 	dwt_softreset();
-
 	dw3000_spi_speed_fast();
+#endif
 }
 
 void port_set_dw_ic_spi_slowrate(void)
