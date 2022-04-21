@@ -25,7 +25,7 @@ add_definitions(-DTEST_READING_DEV_ID)
 | READING_DEV_ID				| ex_00a_reading_dev_id		| Run tested |
 | SIMPLE_TX						| ex_01a_simple_tx			| Run tested |
 | SIMPLE_TX_PDOA				| ex_01h_simple_tx_pdoa 	| Compile tested |
-| SIMPLE_RX 					| ex_02a_simple_rx			| Compile tested |
+| SIMPLE_RX 					| ex_02a_simple_rx			| Run tested |
 | RX_SNIFF						| ex_02d_rx_sniff			| Compile tested |
 | RX_TRIM						| ex_02f_rx_with_crystal_trim | Compile tested |
 | RX_DIAG						| ex_02c_rx_diagnostics		| Compile tested |
@@ -62,7 +62,7 @@ add_definitions(-DTEST_READING_DEV_ID)
 | SIMPLE_RX_STS_SDC				| ex_01g_simple_tx_sts_sdc	| Compile tested |
 | ACK_DATA_RX_DBL_BUFF			| ex_07c_ack_data_rx_dbl_buff | Compile tested |
 | SPI_CRC						| ex_11a_spi_crc			| Compile tested |
-| SIMPLE_RX_PDOA				| ex_02h_simple_rx_pdoa		| Compile tested |
+| SIMPLE_RX_PDOA				| ex_02h_simple_rx_pdoa		| Run tested |
 | OTP_WRITE						| ex_14_otp_write			| Compile tested |
 | LE_PEND_TX					| ex_15_le_pend				| Compile tested |
 | LE_PEND_RX					| ex_15_le_pend				| Compile tested |
