@@ -32,5 +32,5 @@ void port_set_dw_ic_spi_fastrate(void)
 
 void port_set_dwic_isr(port_deca_isr_t deca_isr)
 {
-	dw3000_set_isr(deca_isr);
+	dw3000_init_interrupt();
 }
