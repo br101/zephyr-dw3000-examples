@@ -5,6 +5,8 @@ cmake_minimum_required(VERSION 3.20.0)
 # add the dw3000-decadriver directory as a zephyr module by hand, not needed when using west
 list(APPEND ZEPHYR_EXTRA_MODULES ${CMAKE_CURRENT_SOURCE_DIR}/dw3000-decadriver/)
 
+#set(SHIELD qorvo_dws3000)
+
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(dw3000-examples)
 
