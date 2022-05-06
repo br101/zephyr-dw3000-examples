@@ -4,6 +4,8 @@
 #include <dw3000.h>
 #include <port.h>
 
+int reset_semaphore;
+
 void Sleep(uint32_t x)
 {
 	k_msleep(x);
@@ -11,11 +13,11 @@ void Sleep(uint32_t x)
 
 void reset_DWIC(void)
 {
-#if 0
+#if 1
 	dw3000_hw_reset();
 #else
 	dw3000_spi_speed_slow();
-	dwt_softreset();
+	dwt_softreset(reset_semaphore);
 	dw3000_spi_speed_fast();
 #endif
 }

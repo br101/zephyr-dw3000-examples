@@ -16,29 +16,29 @@
 #define EXAMPLES_CONFIG_OPTIONS_H_
 
 /* Index values for errors in array */
-#define CRC_ERR_IDX 0
-#define RSE_ERR_IDX 1
-#define PHE_ERR_IDX 2
-#define SFDTO_ERR_IDX 3
-#define PTO_ERR_IDX 4
-#define RTO_ERR_IDX 5
-#define SPICRC_ERR_IDX 6
-#define TXTO_ERR_IDX 7
-#define ARFE_ERR_IDX 8
-#define TS_MISMATCH_ERR_IDX 9
-#define BAD_FRAME_ERR_IDX 10
-#define PREAMBLE_COUNT_ERR_IDX 11
-#define CP_QUAL_ERR_IDX 12
-#define STS_PREAMBLE_ERR 13
-#define STS_PEAK_GROWTH_RATE_ERR 14
-#define STS_ADC_COUNT_ERR 15
-#define STS_SFD_COUNT_ERR 16
-#define STS_LATE_FIRST_PATH_ERR 17
-#define STS_LATE_COARSE_EST_ERR 18
-#define STS_COARSE_EST_EMPTY_ERR 19
+#define CRC_ERR_IDX                0
+#define RSE_ERR_IDX                1
+#define PHE_ERR_IDX                2
+#define SFDTO_ERR_IDX              3
+#define PTO_ERR_IDX                4
+#define RTO_ERR_IDX                5
+#define SPICRC_ERR_IDX             6
+#define TXTO_ERR_IDX               7
+#define ARFE_ERR_IDX               8
+#define TS_MISMATCH_ERR_IDX        9
+#define BAD_FRAME_ERR_IDX          10
+#define PREAMBLE_COUNT_ERR_IDX     11
+#define CP_QUAL_ERR_IDX            12
+#define STS_PREAMBLE_ERR           13
+#define STS_PEAK_GROWTH_RATE_ERR   14
+#define STS_ADC_COUNT_ERR          15
+#define STS_SFD_COUNT_ERR          16
+#define STS_LATE_FIRST_PATH_ERR    17
+#define STS_LATE_COARSE_EST_ERR    18
+#define STS_COARSE_EST_EMPTY_ERR   19
 #define STS_HIGH_NOISE_THREASH_ERR 20
-#define STS_NON_TRIANGLE_ERR 21
-#define STS_LOG_REG_FAILED_ERR 22
+#define STS_NON_TRIANGLE_ERR       21
+#define STS_LOG_REG_FAILED_ERR     22
 
 /*
  * Number of ranges to attempt in test
@@ -54,7 +54,7 @@
  * DWT_ERROR status allows the user to tweak their system to calculate the
  * shortest turn-around time for messages.
  */
-#define CPU_COMP 400
+#define CPU_PROCESSING_TIME 400
 
 /*
  * SPI Rate Configuration Settings
@@ -68,7 +68,7 @@
  * A larger threshold allows for better coverage with this coverage.
  * This should be fixed for DW3000 C0 devices.
  */
-#define TS_MISMATCH_THRESHOLD 5*64       /* 64 = 1 ns --> 5 ns */
+#define TS_MISMATCH_THRESHOLD 5 * 64 /* 64 = 1 ns --> 5 ns */
 
 /*
  * Please note that a PRF of 16 MHz and a STS PRF of 64 MHz will not be supported for the DW3000.

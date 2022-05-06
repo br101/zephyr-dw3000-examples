@@ -4,20 +4,20 @@
  *
  * @attention
  *
- * Copyright 2016-2020 (c) Decawave Ltd, Dublin, Ireland.
+ * Copyright 2016 - 2021 (c) Decawave Ltd, Dublin, Ireland.
  *
  * All rights reserved.
  *
  * @author Decawave
  */
 
+#include "deca_probe_interface.h"
 #include <deca_device_api.h>
-#include <deca_regs.h>
 #include <deca_spi.h>
+#include <example_selection.h>
 #include <port.h>
 #include <shared_defines.h>
-#include <example_selection.h>
-
+#include <shared_functions.h>
 
 #if defined(TEST_TX_SLEEP_TIMED)
 
@@ -28,19 +28,19 @@ extern void test_run_info(unsigned char *data);
 
 /* Default communication configuration. We use default non-STS DW mode. */
 static dwt_config_t config = {
-    5,               /* Channel number. */
-    DWT_PLEN_128,    /* Preamble length. Used in TX only. */
-    DWT_PAC8,        /* Preamble acquisition chunk size. Used in RX only. */
-    9,               /* TX preamble code. Used in TX only. */
-    9,               /* RX preamble code. Used in RX only. */
-    1,               /* 0 to use standard 8 symbol SFD, 1 to use non-standard 8 symbol, 2 for non-standard 16 symbol SFD and 3 for 4z 8 symbol SDF type */
-    DWT_BR_6M8,      /* Data rate. */
-    DWT_PHRMODE_STD, /* PHY header mode. */
-    DWT_PHRRATE_STD, /* PHY header rate. */
-    (129 + 8 - 8),   /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
-    DWT_STS_MODE_OFF,/* STS disabled */
-    DWT_STS_LEN_64,  /* STS length see allowed values in Enum dwt_sts_lengths_e */
-    DWT_PDOA_M0      /* PDOA mode off */
+    5,                /* Channel number. */
+    DWT_PLEN_128,     /* Preamble length. Used in TX only. */
+    DWT_PAC8,         /* Preamble acquisition chunk size. Used in RX only. */
+    9,                /* TX preamble code. Used in TX only. */
+    9,                /* RX preamble code. Used in RX only. */
+    1,                /* 0 to use standard 8 symbol SFD, 1 to use non-standard 8 symbol, 2 for non-standard 16 symbol SFD and 3 for 4z 8 symbol SDF type */
+    DWT_BR_6M8,       /* Data rate. */
+    DWT_PHRMODE_STD,  /* PHY header mode. */
+    DWT_PHRRATE_STD,  /* PHY header rate. */
+    (129 + 8 - 8),    /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
+    DWT_STS_MODE_OFF, /* STS disabled */
+    DWT_STS_LEN_64,   /* STS length see allowed values in Enum dwt_sts_lengths_e */
+    DWT_PDOA_M0       /* PDOA mode off */
 };
 
 /* The frame sent in this example is an 802.15.4e standard blink. It is a 12-byte frame composed of the following fields:
@@ -48,7 +48,7 @@ static dwt_config_t config = {
  *     - byte 1: sequence number, incremented for each new frame.
  *     - byte 2 -> 9: device ID, see NOTE 1 below.
  *     - byte 10/11: frame check-sum, automatically set by DW IC.  */
-static uint8_t tx_msg[] = {0xC5, 0, 'D', 'E', 'C', 'A', 'W', 'A', 'V', 'E', 0, 0};
+static uint8_t tx_msg[] = { 0xC5, 0, 'D', 'E', 'C', 'A', 'W', 'A', 'V', 'E', 0, 0 };
 /* Index to access to sequence number of the blink frame in the tx_msg array. */
 #define BLINK_FRAME_SN_IDX 1
 
@@ -80,7 +80,7 @@ int tx_timed_sleep(void)
     /* Display application name on LCD. */
     test_run_info((unsigned char *)APP_NAME);
 
-    /* Configure SPI rate, DW3000 supports up to 38 MHz */
+    /* Configure SPI rate, DW3000 supports up to 36 MHz */
     port_set_dw_ic_spi_fastrate();
 
     /* Reset DW IC */
@@ -88,52 +88,52 @@ int tx_timed_sleep(void)
 
     Sleep(2); // Time needed for DW3000 to start up (transition from INIT_RC to IDLE_RC)
 
-    while (!dwt_checkidlerc()) /* Need to make sure DW IC is in IDLE_RC before proceeding */
-    { };
+    /* Probe for the correct device driver. */
+    dwt_probe((struct dwt_probe_s *)&dw3000_probe_interf);
+
+    while (!dwt_checkidlerc()) /* Need to make sure DW IC is in IDLE_RC before proceeding */ { };
 
     if (dwt_initialise(DWT_DW_INIT) == DWT_ERROR)
     {
         test_run_info((unsigned char *)"INIT FAILED     ");
-        while (1)
-        { };
+        while (1) { };
     }
 
     /*Clearing the SPI ready interrupt*/
-    dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RCINIT_BIT_MASK | SYS_STATUS_SPIRDY_BIT_MASK);
+    dwt_writesysstatuslo(DWT_INT_RCINIT_BIT_MASK | DWT_INT_SPIRDY_BIT_MASK);
 
     /* Install DW IC IRQ handler. NOTE: the IRQ line must have a PULLDOWN or else it may trigger incorrectly when the device is sleeping*/
     port_set_dwic_isr(dwt_isr);
 
     /* Calibrate and configure sleep count. */
     lp_osc_freq = XTAL_FREQ_HZ / dwt_calibratesleepcnt();
-    sleep_cnt = ((SLEEP_TIME_MS * ((uint32_t) lp_osc_freq)) / 1000) >> 12;
-    //sleep_cnt = 0x06; // 1 step is ~ 175ms, 6 ~= 1s
+    sleep_cnt = ((SLEEP_TIME_MS * ((uint32_t)lp_osc_freq)) / 1000) >> 12;
     dwt_configuresleepcnt(sleep_cnt);
 
     /* Configure DW IC. See NOTE 6 below. */
-    if(dwt_configure(&config)) /* if the dwt_configure returns DWT_ERROR either the PLL or RX calibration has failed the host should reset the device */
+    /* if the dwt_configure returns DWT_ERROR either the PLL or RX calibration has failed the host should reset the device */
+    if (dwt_configure(&config))
     {
         test_run_info((unsigned char *)"CONFIG FAILED     ");
-        while (1)
-        { };
+        while (1) { };
     }
 
     /* Configure the TX spectrum parameters (power, PG delay and PG count) */
     dwt_configuretxrf(&txconfig_options);
 
     /* Configure sleep and wake-up parameters. */
-    dwt_configuresleep(DWT_CONFIG, DWT_PRES_SLEEP | DWT_WAKE_CSN | DWT_SLEEP | DWT_SLP_EN);
+    /* DWT_PGFCAL is added to make sure receiver is re-enabled on wake. */
+    dwt_configuresleep(DWT_CONFIG | DWT_PGFCAL, DWT_PRES_SLEEP | DWT_WAKE_CSN | DWT_SLEEP | DWT_SLP_EN);
 
     /* Register the call-backs (only SPI ready callback is used). */
-    dwt_setcallbacks(NULL, NULL, NULL, NULL, NULL, &spi_ready_cb);
-
+    dwt_setcallbacks(NULL, NULL, NULL, NULL, NULL, &spi_ready_cb, NULL);
 
     /* Loop forever sending frames periodically. */
     while (1)
     {
         /* Write frame data to DW IC and prepare transmission. See NOTE 4 below. */
         dwt_writetxdata(sizeof(tx_msg), tx_msg, 0); /* Zero offset in TX buffer. */
-        dwt_writetxfctrl(sizeof(tx_msg), 0, 0); /* Zero offset in TX buffer, no ranging. */
+        dwt_writetxfctrl(sizeof(tx_msg), 0, 0);     /* Zero offset in TX buffer, no ranging. */
 
         /* Start transmission. */
         dwt_starttx(DWT_START_TX_IMMEDIATE);
@@ -146,11 +146,10 @@ int tx_timed_sleep(void)
         /* Poll DW IC until TX frame sent event set. See NOTE 7 below.
          * STATUS register is 4 bytes long but, as the event we are looking at is in the first byte of the register, we can use this simplest API
          * function to access it.*/
-        while (!(dwt_read32bitreg(SYS_STATUS_ID) & SYS_STATUS_TXFRS_BIT_MASK))
-        {};
+        waitforsysstatus(NULL, NULL, DWT_INT_TXFRS_BIT_MASK, 0);
 
         /* Clear TX frame sent event. */
-        dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);
+        dwt_writesysstatuslo(DWT_INT_TXFRS_BIT_MASK);
 
         /* Put DW IC to sleep. Go to IDLE state after wakeup*/
         dwt_entersleep(DWT_DW_IDLE);
@@ -158,8 +157,7 @@ int tx_timed_sleep(void)
         sleeping = 1;
 
         /* In this example, there is nothing to do to wake the DW IC up as it is handled by the sleep timer. */
-        while (sleeping)
-        {}; /* Wait for device to wake up */
+        while (sleeping) { }; /* Wait for device to wake up */
 
         /* Increment the blink frame sequence number (modulo 256). */
         tx_msg[BLINK_FRAME_SN_IDX]++;
@@ -176,18 +174,14 @@ int tx_timed_sleep(void)
  */
 static void spi_ready_cb(const dwt_cb_data_t *cb_data)
 {
-#ifdef NRF52840_XXAA
-    UNUSED_PARAMETER(cb_data);
-#else
-    UNUSED(cb_data);
-#endif //NRF52840_XXAA
-    while (!dwt_checkidlerc()) /* Need to make sure DW IC is in IDLE_RC before proceeding */
-    { };
+    (void)cb_data;
+    /* Need to make sure DW IC is in IDLE_RC before proceeding */
+    while (!dwt_checkidlerc()) { };
 
     /* Restore the required configurations on wake */
     dwt_restoreconfig();
 
-    sleeping = 0; //device is awake
+    sleeping = 0; // device is awake
 }
 
 #endif

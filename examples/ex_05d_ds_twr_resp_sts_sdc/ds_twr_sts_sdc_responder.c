@@ -2,32 +2,31 @@
  *  @file    ds_twr_sts_sdc_responder.c
  *  @brief   Double-sided two-way ranging (DS TWR) with STS with SDC (STS-SDC) responder example code
  *
- *           This is a simple code example which acts as the responder in a DS TWR with STS-SDC distance measurement exchange. This application waits for a "poll"
- *           message (recording the RX time-stamp of the poll) expected from the "DS TWR initiator STS-SDC" example code (companion to this application), and
- *           then sends a "response" message recording its TX time-stamp, after which it waits for a "final" message from the initiator to complete
- *           the exchange. The final message contains the remote initiator's time-stamps of poll TX, response RX and final TX. With this data and the
- *           local time-stamps, (of poll RX, response TX and final RX), this example application works out a value for the time-of-flight over-the-air
- *           and, thus, the estimated distance between the two devices, which it writes to the LCD.
+ * This is a simple code example which acts as the responder in a DS TWR with STS-SDC distance measurement exchange. This application waits for a
+ * "poll" message (recording the RX time-stamp of the poll) expected from the "DS TWR initiator STS-SDC" example code (companion to this application), and then
+ * sends a "response" message recording its TX time-stamp, after which it waits for a "final" message from the initiator to complete the exchange. The final
+ * message contains the remote initiator's time-stamps of poll TX, response RX and final TX. With this data and the local time-stamps, (of poll RX, response TX
+ * and final RX), this example application works out a value for the time-of-flight over-the-air and, thus, the estimated distance between the two devices,
+ * which it writes to the LCD.
  *
- *           Note: As STS is used, the receptions are considered valid if and only if the STS quality index is good. Then the STS timestamp
- *           is read and used for the TWR range calculation. Please see note below on Super Deterministic Code (SDC).
+ * Note: As STS is used, the receptions are considered valid if and only if the STS quality index is good. Then the STS timestamp is read and used for the TWR
+ * range calculation. Please see note below on Super Deterministic Code (SDC).
  *
  * @attention
  *
- * Copyright 2017-2020 (c) Decawave Ltd, Dublin, Ireland.
+ * Copyright 2017 - 2021 (c) Decawave Ltd, Dublin, Ireland.
  *
  * All rights reserved.
  *
  * @author Decawave
  */
+#include "deca_probe_interface.h"
 #include <deca_device_api.h>
-#include <deca_regs.h>
 #include <deca_spi.h>
+#include <example_selection.h>
 #include <port.h>
 #include <shared_defines.h>
 #include <shared_functions.h>
-#include <example_selection.h>
-
 
 #if defined(TEST_DS_TWR_STS_SDC_RESPONDER)
 
@@ -39,7 +38,7 @@ extern void test_run_info(unsigned char *data);
 /* Default communication configuration. We use STS with SDC DW mode. */
 static dwt_config_t config = {
     5,               /* Channel number. */
-    DWT_PLEN_64,    /* Preamble length. Used in TX only. */
+    DWT_PLEN_64,     /* Preamble length. Used in TX only. */
     DWT_PAC8,        /* Preamble acquisition chunk size. Used in RX only. */
     9,               /* TX preamble code. Used in TX only. */
     9,               /* RX preamble code. Used in RX only. */
@@ -47,10 +46,10 @@ static dwt_config_t config = {
     DWT_BR_6M8,      /* Data rate. */
     DWT_PHRMODE_STD, /* PHY header mode. */
     DWT_PHRRATE_STD, /* PHY header rate. */
-    (65 + 8 - 8),   /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
+    (65 + 8 - 8),    /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
     DWT_STS_MODE_1 | DWT_STS_MODE_SDC, /* STS mode 1 with SDC see NOTE on SDC below*/
-    DWT_STS_LEN_64,/* STS length see allowed values in Enum dwt_sts_lengths_e */
-    DWT_PDOA_M0      /* PDOA mode off */
+    DWT_STS_LEN_64,                    /* STS length see allowed values in Enum dwt_sts_lengths_e */
+    DWT_PDOA_M0                        /* PDOA mode off */
 };
 
 /* have some delay after each range (e.g. so LDC can be updated (on ARM eval boards), needs to be slightly less than RNG_DELAY_MS in the initiator example*/
@@ -61,15 +60,15 @@ static dwt_config_t config = {
 #define RX_ANT_DLY 16385
 
 /* Frames used in the ranging process. See NOTE 2 below. */
-static uint8_t rx_poll_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0x21};
-static uint8_t tx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0x10, 0x02, 0, 0};
-static uint8_t rx_final_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0x23, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+static uint8_t rx_poll_msg[] = { 0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0x21 };
+static uint8_t tx_resp_msg[] = { 0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0x10, 0x02, 0, 0 };
+static uint8_t rx_final_msg[] = { 0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0x23, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 /* Length of the common part of the message (up to and including the function code, see NOTE 2 below). */
 #define ALL_MSG_COMMON_LEN 10
 /* Index to access some of the fields in the frames involved in the process. */
-#define ALL_MSG_SN_IDX 2
-#define FINAL_MSG_POLL_TX_TS_IDX 10
-#define FINAL_MSG_RESP_RX_TS_IDX 14
+#define ALL_MSG_SN_IDX            2
+#define FINAL_MSG_POLL_TX_TS_IDX  10
+#define FINAL_MSG_RESP_RX_TS_IDX  14
 #define FINAL_MSG_FINAL_TX_TS_IDX 18
 /* Frame sequence number, incremented after each transmission. */
 static uint8_t frame_seq_nb = 0;
@@ -121,7 +120,7 @@ int ds_twr_sts_sdc_responder(void)
     /* Display application name on LCD. */
     test_run_info((unsigned char *)APP_NAME);
 
-    /* Configure SPI rate, DW3000 supports up to 38 MHz */
+    /* Configure SPI rate, DW3000 supports up to 36 MHz */
     port_set_dw_ic_spi_fastrate();
 
     /* Reset DW IC */
@@ -129,22 +128,23 @@ int ds_twr_sts_sdc_responder(void)
 
     Sleep(2); // Time needed for DW3000 to start up (transition from INIT_RC to IDLE_RC
 
-    while (!dwt_checkidlerc()) /* Need to make sure DW IC is in IDLE_RC before proceeding */
-    { };
+    /* Probe for the correct device driver. */
+    dwt_probe((struct dwt_probe_s *)&dw3000_probe_interf);
+
+    while (!dwt_checkidlerc()) /* Need to make sure DW IC is in IDLE_RC before proceeding */ { };
 
     if (dwt_initialise(DWT_DW_INIT) == DWT_ERROR)
     {
         test_run_info((unsigned char *)"INIT FAILED     ");
-        while (1)
-        { };
+        while (1) { };
     }
 
     /* Configure DW IC. See NOTE 15 below. */
-    if(dwt_configure(&config)) /* if the dwt_configure returns DWT_ERROR either the PLL or RX calibration has failed the host should reset the device */
+    /* if the dwt_configure returns DWT_ERROR either the PLL or RX calibration has failed the host should reset the device */
+    if (dwt_configure(&config))
     {
         test_run_info((unsigned char *)"CONFIG FAILED     ");
-        while (1)
-        { };
+        while (1) { };
     }
 
     /* Configure the TX spectrum parameters (power, PG delay and PG count) */
@@ -153,7 +153,6 @@ int ds_twr_sts_sdc_responder(void)
     /* Apply default antenna delay value. See NOTE 1 below. */
     dwt_setrxantennadelay(RX_ANT_DLY);
     dwt_settxantennadelay(TX_ANT_DLY);
-
 
     /* Next can enable TX/RX states output on GPIOs 5 and 6 to help debug, and also TX/RX LEDs
      * Note, in real low power applications the LEDs should not be used. */
@@ -172,22 +171,23 @@ int ds_twr_sts_sdc_responder(void)
         dwt_rxenable(DWT_START_RX_IMMEDIATE);
 
         /* Poll for reception of a frame or error/timeout. See NOTE 8 below. */
-        while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR)))
-        { };
+        waitforsysstatus(&status_reg, NULL, (DWT_INT_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR), 0);
 
-        if (status_reg & SYS_STATUS_RXFCG_BIT_MASK)
+        if (status_reg & DWT_INT_RXFCG_BIT_MASK)
         {
-            uint32_t frame_len;
-            int16_t stsqual;
+            uint16_t frame_len;
+            int goodSts = 0;    /* Used for checking STS quality in received signal */
+            int16_t stsQual;    /* This will contain STS quality index */
+            uint16_t stsStatus; /* Used to check for good STS status (no errors). */
 
             /* Clear good RX frame event in the DW3000 status register. */
-            dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG_BIT_MASK);
+            dwt_writesysstatuslo(DWT_INT_RXFCG_BIT_MASK);
 
-            //as STS mode is used, we only consider frames that are received with good STS quality
-            if(dwt_readstsquality(&stsqual)) //if STS is good this will be true >= 0
+            // as STS mode is used, we only consider frames that are received with good STS quality
+            if (((goodSts = dwt_readstsquality(&stsQual)) >= 0) && (dwt_readstsstatus(&stsStatus, 0) == DWT_SUCCESS)) // if STS is good this will be true >= 0
             {
                 /* A frame has been received, read it into the local buffer. */
-                frame_len = dwt_read32bitreg(RX_FINFO_ID) & FRAME_LEN_MAX_EX;
+                frame_len = dwt_getframelength();
                 if (frame_len <= RX_BUF_LEN)
                 {
                     dwt_readrxdata(rx_buffer, frame_len, 0);
@@ -214,8 +214,8 @@ int ds_twr_sts_sdc_responder(void)
 
                     /* Write and send the response message. See NOTE 10 below.*/
                     tx_resp_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
-                    dwt_writetxdata(sizeof(tx_resp_msg), tx_resp_msg, 0); /* Zero offset in TX buffer. */
-                    dwt_writetxfctrl(sizeof(tx_resp_msg)+FCS_LEN, 0, 1); /* Zero offset in TX buffer, ranging. */
+                    dwt_writetxdata(sizeof(tx_resp_msg), tx_resp_msg, 0);  /* Zero offset in TX buffer. */
+                    dwt_writetxfctrl(sizeof(tx_resp_msg) + FCS_LEN, 0, 1); /* Zero offset in TX buffer, ranging. */
                     /* Set preamble timeout for expected final frame from the initiator. See NOTE 6 below. */
                     dwt_setpreambledetecttimeout(PRE_TIMEOUT);
                     ret = dwt_starttx(DWT_START_TX_DELAYED | DWT_RESPONSE_EXPECTED);
@@ -227,22 +227,22 @@ int ds_twr_sts_sdc_responder(void)
                     }
 
                     /* Poll for reception of expected "final" frame or error/timeout. See NOTE 8 below. */
-                    while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR)))
-                    { };
+                    waitforsysstatus(&status_reg, NULL, (DWT_INT_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR), 0);
 
                     /* Increment frame sequence number after transmission of the response message (modulo 256). */
                     frame_seq_nb++;
 
-                    if (status_reg & SYS_STATUS_RXFCG_BIT_MASK)
+                    if (status_reg & DWT_INT_RXFCG_BIT_MASK)
                     {
                         /* Clear good RX frame event and TX frame sent in the DW3000 status register. */
-                        dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_TXFRS_BIT_MASK);
+                        dwt_writesysstatuslo(DWT_INT_RXFCG_BIT_MASK | DWT_INT_TXFRS_BIT_MASK);
 
-                        //as STS mode is used, we only consider frames that are received with good STS quality
-                        if(dwt_readstsquality(&stsqual))  //if STS is good this will be true >= 0
+                        // as STS mode is used, we only consider frames that are received with good STS quality
+                        if (((goodSts = dwt_readstsquality(&stsQual)) >= 0)
+                            && (dwt_readstsstatus(&stsStatus, 0) == DWT_SUCCESS)) // if STS is good this will be true >= 0
                         {
                             /* A frame has been received, read it into the local buffer. */
-                            frame_len = dwt_read32bitreg(RX_FINFO_ID) & FRAME_LEN_MAX_EX;
+                            frame_len = dwt_getframelength();
                             if (frame_len <= RX_BUF_LEN)
                             {
                                 dwt_readrxdata(rx_buffer, frame_len, 0);
@@ -280,35 +280,30 @@ int ds_twr_sts_sdc_responder(void)
                                 tof = tof_dtu * DWT_TIME_UNITS;
                                 distance = tof * SPEED_OF_LIGHT;
 
-                                /* Display computed distance on LCD. */
-                                //sprintf(dist_str, "DIST: %3.2f m", distance);
-                                //test_run_info(dist_str);
-
                                 range_ok = 1;
                             }
-                        } //if STS good on the Final message reception
+                        } // if STS good on the Final message reception
                     }
                     else
                     {
                         /* Clear RX error/timeout events in the DW3000 status register. */
-                        dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
+                        dwt_writesysstatuslo(SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
                     }
                 }
-            } //if STS good on the Poll message reception
+            } // if STS good on the Poll message reception
         }
         else
         {
             /* Clear RX error/timeout events in the DW3000 status register. */
-            dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
+            dwt_writesysstatuslo(SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
         }
 
         /* add some delay before next ranging exchange */
-        if(range_ok)
+        if (range_ok)
         {
             range_ok = 0;
             Sleep(DELAY_MS);
         }
-
     }
 }
 #endif
@@ -364,7 +359,7 @@ int ds_twr_sts_sdc_responder(void)
  *    details about the timings involved in the ranging process.
  * 5. This timeout is for complete reception of a frame, i.e. timeout duration must take into account the length of the expected frame. Here the value
  *    is arbitrary but chosen large enough to make sure that there is enough time to receive the complete final frame sent by the responder at the
- *    6.81 Mbps data rate used (around 200 us).
+ *    6.81 Mbps data rate used (around 300 us).
  * 6. The preamble timeout allows the receiver to stop listening in situations where preamble is not starting (which might be because the responder is
  *    out of range or did not receive the message to respond to). This saves the power waste of listening for a message that is not coming. We
  *    recommend a minimum preamble timeout of 5 PACs for short range applications and a larger value (e.g. in the range of 50% to 80% of the preamble
@@ -392,7 +387,7 @@ int ds_twr_sts_sdc_responder(void)
  *     subtraction.
  * 13. The user is referred to DecaRanging ARM application (distributed with EVK1000 product) for additional practical example of usage, and to the
  *     DW3000 API Guide for more details on the DW3000 driver functions.
- * 14. In this example, the DW IC is put into IDLE state after calling dwt_initialise(). This means that a fast SPI rate of up to 38 MHz can be used
+ * 14. In this example, the DW IC is put into IDLE state after calling dwt_initialise(). This means that a fast SPI rate of up to 36 MHz can be used
  *     thereafter.
  * 15. Desired configuration by user may be different to the current programmed configuration. dwt_configure is called to set desired
  *     configuration.

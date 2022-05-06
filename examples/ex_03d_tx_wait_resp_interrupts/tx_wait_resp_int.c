@@ -7,19 +7,18 @@
  *
  * @attention
  *
- * Copyright 2016-2020 (c) Decawave Ltd, Dublin, Ireland.
+ * Copyright 2016 - 2021 (c) Decawave Ltd, Dublin, Ireland.
  *
  * All rights reserved.
  *
  * @author Decawave
  */
+#include "deca_probe_interface.h"
 #include <deca_device_api.h>
-#include <deca_regs.h>
 #include <deca_spi.h>
+#include <example_selection.h>
 #include <port.h>
 #include <shared_defines.h>
-#include <example_selection.h>
-
 
 #if defined(TEST_TX_WAIT_RESP_INT)
 
@@ -30,19 +29,19 @@ extern void test_run_info(unsigned char *data);
 
 /* Default communication configuration. We use default non-STS DW mode. */
 static dwt_config_t config = {
-    5,               /* Channel number. */
-    DWT_PLEN_128,    /* Preamble length. Used in TX only. */
-    DWT_PAC8,        /* Preamble acquisition chunk size. Used in RX only. */
-    9,               /* TX preamble code. Used in TX only. */
-    9,               /* RX preamble code. Used in RX only. */
-    1,               /* 0 to use standard 8 symbol SFD, 1 to use non-standard 8 symbol, 2 for non-standard 16 symbol SFD and 3 for 4z 8 symbol SDF type */
-    DWT_BR_6M8,      /* Data rate. */
-    DWT_PHRMODE_STD, /* PHY header mode. */
-    DWT_PHRRATE_STD, /* PHY header rate. */
-    (129 + 8 - 8),   /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
+    5,                /* Channel number. */
+    DWT_PLEN_128,     /* Preamble length. Used in TX only. */
+    DWT_PAC8,         /* Preamble acquisition chunk size. Used in RX only. */
+    9,                /* TX preamble code. Used in TX only. */
+    9,                /* RX preamble code. Used in RX only. */
+    1,                /* 0 to use standard 8 symbol SFD, 1 to use non-standard 8 symbol, 2 for non-standard 16 symbol SFD and 3 for 4z 8 symbol SDF type */
+    DWT_BR_6M8,       /* Data rate. */
+    DWT_PHRMODE_STD,  /* PHY header mode. */
+    DWT_PHRRATE_STD,  /* PHY header rate. */
+    (129 + 8 - 8),    /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
     DWT_STS_MODE_OFF, /* STS disabled */
-    DWT_STS_LEN_64,  /* STS length see allowed values in Enum dwt_sts_lengths_e */
-    DWT_PDOA_M0      /* PDOA mode off */
+    DWT_STS_LEN_64,   /* STS length see allowed values in Enum dwt_sts_lengths_e */
+    DWT_PDOA_M0       /* PDOA mode off */
 };
 
 /* The frame sent in this example is a blink encoded as per the ISO/IEC 24730-62:2013 standard. It is a 14-byte frame composed of the following fields:
@@ -52,7 +51,7 @@ static dwt_config_t config = {
  *     - byte 10: encoding header (0x43 to indicate no extended ID, temperature, or battery status is carried in the message).
  *     - byte 11: EXT header (0x02 to indicate tag is listening for a response immediately after this message).
  *     - byte 12/13: frame check-sum, automatically set by DW IC. */
-static uint8_t tx_msg[] = {0xC5, 0, 'D', 'E', 'C', 'A', 'W', 'A', 'V', 'E', 0x43, 0x02, 0, 0};
+static uint8_t tx_msg[] = { 0xC5, 0, 'D', 'E', 'C', 'A', 'W', 'A', 'V', 'E', 0x43, 0x02, 0, 0 };
 /* Index to access the sequence number of the blink frame in the tx_msg array. */
 #define BLINK_FRAME_SN_IDX 1
 
@@ -96,7 +95,7 @@ int tx_wait_resp_int(void)
     /* Display application name on LCD. */
     test_run_info((unsigned char *)APP_NAME);
 
-    /* Configure SPI rate, DW3000 supports up to 38 MHz */
+    /* Configure SPI rate, DW3000 supports up to 36 MHz */
     port_set_dw_ic_spi_fastrate();
 
     /* Reset DW IC */
@@ -104,38 +103,39 @@ int tx_wait_resp_int(void)
 
     Sleep(2); // Time needed for DW3000 to start up (transition from INIT_RC to IDLE_RC, or could wait for SPIRDY event)
 
-    while (!dwt_checkidlerc()) /* Need to make sure DW IC is in IDLE_RC before proceeding */
-    { };
+    /* Probe for the correct device driver. */
+    dwt_probe((struct dwt_probe_s *)&dw3000_probe_interf);
+
+    while (!dwt_checkidlerc()) /* Need to make sure DW IC is in IDLE_RC before proceeding */ { };
 
     if (dwt_initialise(DWT_DW_INIT) == DWT_ERROR)
     {
         test_run_info((unsigned char *)"INIT FAILED     ");
-        while (1)
-        { };
+        while (1) { };
     }
 
     /* Configure DW IC. See NOTE 10 below. */
-    if(dwt_configure(&config)) /* if the dwt_configure returns DWT_ERROR either the PLL or RX calibration has failed the host should reset the device */
+    /* if the dwt_configure returns DWT_ERROR either the PLL or RX calibration has failed the host should reset the device */
+    if (dwt_configure(&config))
     {
         test_run_info((unsigned char *)"CONFIG FAILED     ");
-        while (1)
-        { };
+        while (1) { };
     }
 
     /* Configure the TX spectrum parameters (power, PG delay and PG count) */
     dwt_configuretxrf(&txconfig_options);
 
     /* Register the call-backs (SPI CRC error callback is not used). */
-    dwt_setcallbacks(&tx_conf_cb, &rx_ok_cb, &rx_to_cb, &rx_err_cb, NULL, NULL);
+    dwt_setcallbacks(&tx_conf_cb, &rx_ok_cb, &rx_to_cb, &rx_err_cb, NULL, NULL, NULL);
 
     /* Enable wanted interrupts (TX confirmation, RX good frames, RX timeouts and RX errors). */
-    dwt_setinterrupt(SYS_ENABLE_LO_TXFRS_ENABLE_BIT_MASK | SYS_ENABLE_LO_RXFCG_ENABLE_BIT_MASK | SYS_ENABLE_LO_RXFTO_ENABLE_BIT_MASK |
-            SYS_ENABLE_LO_RXPTO_ENABLE_BIT_MASK | SYS_ENABLE_LO_RXPHE_ENABLE_BIT_MASK | SYS_ENABLE_LO_RXFCE_ENABLE_BIT_MASK |
-            SYS_ENABLE_LO_RXFSL_ENABLE_BIT_MASK | SYS_ENABLE_LO_RXSTO_ENABLE_BIT_MASK, 0, DWT_ENABLE_INT);
+    dwt_setinterrupt(DWT_INT_TXFRS_BIT_MASK | DWT_INT_RXFCG_BIT_MASK | DWT_INT_RXFTO_BIT_MASK | DWT_INT_RXPTO_BIT_MASK | DWT_INT_RXPHE_BIT_MASK
+                         | DWT_INT_RXFCE_BIT_MASK | DWT_INT_RXFSL_BIT_MASK | DWT_INT_RXSTO_BIT_MASK,
+        0, DWT_ENABLE_INT);
 
     /*Clearing the SPI ready interrupt*/
-    dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RCINIT_BIT_MASK | SYS_STATUS_SPIRDY_BIT_MASK);
-    
+    dwt_writesysstatuslo(DWT_INT_RCINIT_BIT_MASK | DWT_INT_SPIRDY_BIT_MASK);
+
     /* Install DW IC IRQ handler. */
     port_set_dwic_isr(dwt_isr);
 
@@ -150,14 +150,13 @@ int tx_wait_resp_int(void)
     {
         /* Write frame data to DW IC and prepare transmission. See NOTE 7 below. */
         dwt_writetxdata(sizeof(tx_msg), tx_msg, 0); /* Zero offset in TX buffer. */
-        dwt_writetxfctrl(sizeof(tx_msg), 0, 0); /* Zero offset in TX buffer, no ranging. */
+        dwt_writetxfctrl(sizeof(tx_msg), 0, 0);     /* Zero offset in TX buffer, no ranging. */
 
         /* Start transmission, indicating that a response is expected so that reception is enabled immediately after the frame is sent. */
         dwt_starttx(DWT_START_TX_IMMEDIATE | DWT_RESPONSE_EXPECTED);
 
         /* Wait for any RX event. */
-        while (tx_delay_ms == -1)
-        { };
+        while (tx_delay_ms == -1) { };
 
         /* Execute the defined delay before next transmission. */
         if (tx_delay_ms > 0)
@@ -188,7 +187,7 @@ static void rx_ok_cb(const dwt_cb_data_t *cb_data)
 
     /* Clear local RX buffer to avoid having leftovers from previous receptions. This is not necessary but is included here to aid reading the RX
      * buffer. */
-    for (i = 0 ; i < FRAME_LEN_MAX; i++ )
+    for (i = 0; i < FRAME_LEN_MAX; i++)
     {
         rx_buffer[i] = 0;
     }
@@ -216,11 +215,7 @@ static void rx_ok_cb(const dwt_cb_data_t *cb_data)
  */
 static void rx_to_cb(const dwt_cb_data_t *cb_data)
 {
-#ifdef NRF52840_XXAA
-    UNUSED_PARAMETER(cb_data);
-#else
-    UNUSED(cb_data);
-#endif //NRF52840_XXAA
+    (void)cb_data;
     /* Set corresponding inter-frame delay. */
     tx_delay_ms = RX_TO_TX_DELAY_MS;
 
@@ -238,11 +233,7 @@ static void rx_to_cb(const dwt_cb_data_t *cb_data)
  */
 static void rx_err_cb(const dwt_cb_data_t *cb_data)
 {
-#ifdef NRF52840_XXAA
-    UNUSED_PARAMETER(cb_data);
-#else
-    UNUSED(cb_data);
-#endif //NRF52840_XXAA
+    (void)cb_data;
     /* Set corresponding inter-frame delay. */
     tx_delay_ms = RX_ERR_TX_DELAY_MS;
 
@@ -260,11 +251,7 @@ static void rx_err_cb(const dwt_cb_data_t *cb_data)
  */
 static void tx_conf_cb(const dwt_cb_data_t *cb_data)
 {
-#ifdef NRF52840_XXAA
-    UNUSED_PARAMETER(cb_data);
-#else
-    UNUSED(cb_data);
-#endif //NRF52840_XXAA
+    (void)cb_data;
     /* This callback has been defined so that a breakpoint can be put here to check it is correctly called but there is actually nothing specific to
      * do on transmission confirmation in this example. Typically, we could activate reception for the response here but this is automatically handled
      * by DW IC using DWT_RESPONSE_EXPECTED parameter when calling dwt_starttx().

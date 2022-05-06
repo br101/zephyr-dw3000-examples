@@ -9,19 +9,19 @@
  *
  * @attention
  *
- * Copyright 2016-2020 (c) Decawave Ltd, Dublin, Ireland.
+ * Copyright 2016 - 2021 (c) Decawave Ltd, Dublin, Ireland.
  *
  * All rights reserved.
  *
  * @author Decawave
  */
+#include "deca_probe_interface.h"
 #include <deca_device_api.h>
-#include <deca_regs.h>
 #include <deca_spi.h>
+#include <example_selection.h>
 #include <port.h>
 #include <shared_defines.h>
-#include <example_selection.h>
-
+#include <shared_functions.h>
 
 #if defined(TEST_ACK_DATA_TX)
 
@@ -32,19 +32,19 @@ extern void test_run_info(unsigned char *data);
 
 /* Default communication configuration. We use default non-STS DW mode. */
 static dwt_config_t config = {
-    5,               /* Channel number. */
-    DWT_PLEN_128,    /* Preamble length. Used in TX only. */
-    DWT_PAC8,        /* Preamble acquisition chunk size. Used in RX only. */
-    9,               /* TX preamble code. Used in TX only. */
-    9,               /* RX preamble code. Used in RX only. */
-    1,               /* 0 to use standard 8 symbol SFD, 1 to use non-standard 8 symbol, 2 for non-standard 16 symbol SFD and 3 for 4z 8 symbol SDF type */
-    DWT_BR_6M8,      /* Data rate. */
-    DWT_PHRMODE_STD, /* PHY header mode. */
-    DWT_PHRRATE_STD, /* PHY header rate. */
-    (129 + 8 - 8),   /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
+    5,                /* Channel number. */
+    DWT_PLEN_128,     /* Preamble length. Used in TX only. */
+    DWT_PAC8,         /* Preamble acquisition chunk size. Used in RX only. */
+    9,                /* TX preamble code. Used in TX only. */
+    9,                /* RX preamble code. Used in RX only. */
+    1,                /* 0 to use standard 8 symbol SFD, 1 to use non-standard 8 symbol, 2 for non-standard 16 symbol SFD and 3 for 4z 8 symbol SDF type */
+    DWT_BR_6M8,       /* Data rate. */
+    DWT_PHRMODE_STD,  /* PHY header mode. */
+    DWT_PHRRATE_STD,  /* PHY header rate. */
+    (129 + 8 - 8),    /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
     DWT_STS_MODE_OFF, /* STS disabled */
-    DWT_STS_LEN_64,/* STS length see allowed values in Enum dwt_sts_lengths_e */
-    DWT_PDOA_M0      /* PDOA mode off */
+    DWT_STS_LEN_64,   /* STS length see allowed values in Enum dwt_sts_lengths_e */
+    DWT_PDOA_M0       /* PDOA mode off */
 };
 
 /* The frame sent in this example is a data frame encoded as per the IEEE 802.15.4-2011 standard. It is a 21-byte frame composed of the following
@@ -67,28 +67,27 @@ static dwt_config_t config = {
  *     - byte 7/8: source address, see NOTE 2 below.
  *     - byte 9 to 18: MAC payload, see NOTE 1 below.
  *     */
-static uint8_t tx_msg[] = {0x61, 0x88, 0, 0xCA, 0xDE, 'X', 'R', 'X', 'T', 'm', 'a', 'c', 'p', 'a', 'y', 'l', 'o', 'a', 'd'};
+static uint8_t tx_msg[] = { 0x61, 0x88, 0, 0xCA, 0xDE, 'X', 'R', 'X', 'T', 'm', 'a', 'c', 'p', 'a', 'y', 'l', 'o', 'a', 'd' };
 /* Index to access the sequence number and frame control fields in frames sent and received. */
-#define FRAME_FC_IDX    0
-#define FRAME_SN_IDX    2
+#define FRAME_FC_IDX 0
+#define FRAME_SN_IDX 2
 /* ACK frame control value. */
-#define ACK_FC_0        0x02
-#define ACK_FC_1        0x00
+#define ACK_FC_0 0x02
+#define ACK_FC_1 0x00
 
 /* Inter-frame delay period, in milliseconds. */
 #define TX_DELAY_MS 1000
 
 /* Receive response timeout, expressed in UWB microseconds (UUS, 1 uus = 512/499.2 µs). See NOTE 3 below. */
-#define RX_RESP_TO_UUS  2200
+#define RX_RESP_TO_UUS 2200
 
 /* Buffer to store received frame. See NOTE 4 below. */
-#define ACK_FRAME_LEN   5
+#define ACK_FRAME_LEN 5
 
 static uint8_t rx_buffer[ACK_FRAME_LEN];
 
 /* Hold copy of status register state here for reference so that it can be examined at a debug breakpoint. */
 static uint32_t status_reg = 0;
-
 
 /* ACK status for last transmitted frame. */
 static int tx_frame_acked = 0;
@@ -108,36 +107,37 @@ extern dwt_txconfig_t txconfig_options;
 int ack_data_tx(void)
 {
     /* Hold copy of frame length of frame received (if good) so that it can be examined at a debug breakpoint. */
-    uint16_t frame_len = 0,tx_frame_len;
+    uint16_t frame_len = 0, tx_frame_len;
     /* Display application name on LCD. */
     test_run_info((unsigned char *)APP_NAME);
 
-    /* Configure SPI rate, DW3000 supports up to 38 MHz */
+    /* Configure SPI rate, DW3000 supports up to 36 MHz */
     port_set_dw_ic_spi_fastrate();
 
     /* Reset DW IC */
     reset_DWIC(); /* Target specific drive of RSTn line into DW IC low for a period. */
 
-    tx_frame_len=sizeof(tx_msg)+FCS_LEN;
+    tx_frame_len = sizeof(tx_msg) + FCS_LEN;
 
     Sleep(2); // Time needed for DW3000 to start up (transition from INIT_RC to IDLE_RC
 
-    while (!dwt_checkidlerc()) /* Need to make sure DW IC is in IDLE_RC before proceeding */
-    { };
+    /* Probe for the correct device driver. */
+    dwt_probe((struct dwt_probe_s *)&dw3000_probe_interf);
+
+    while (!dwt_checkidlerc()) /* Need to make sure DW IC is in IDLE_RC before proceeding */ { };
 
     if (dwt_initialise(DWT_DW_IDLE) == DWT_ERROR)
     {
         test_run_info((unsigned char *)"INIT FAILED");
-        while (1)
-        { };
+        while (1) { };
     }
 
     /* Configure DW IC. See NOTE 11 below. */
-    if(dwt_configure(&config)) /* if the dwt_configure returns DWT_ERROR either the PLL or RX calibration has failed the host should reset the device */
+    /* if the dwt_configure returns DWT_ERROR either the PLL or RX calibration has failed the host should reset the device */
+    if (dwt_configure(&config))
     {
         test_run_info((unsigned char *)"CONFIG FAILED     ");
-        while (1)
-        { };
+        while (1) { };
     }
 
     /* Configure the TX spectrum parameters (power, PG delay and PG count) */
@@ -155,30 +155,28 @@ int ack_data_tx(void)
     while (1)
     {
         /* Write frame data to DW IC and prepare transmission. See NOTE 7 below.*/
-        dwt_writetxdata(tx_frame_len-FCS_LEN, tx_msg, 0); /* Zero offset in TX buffer. */
-        dwt_writetxfctrl(tx_frame_len, 0, 0); /* Zero offset in TX buffer, no ranging. */
+        dwt_writetxdata(tx_frame_len - FCS_LEN, tx_msg, 0); /* Zero offset in TX buffer. */
+        dwt_writetxfctrl(tx_frame_len, 0, 0);               /* Zero offset in TX buffer, no ranging. */
 
         /* Start transmission, indicating that a response is expected so that reception is enabled immediately after the frame is sent. */
         dwt_starttx(DWT_START_TX_IMMEDIATE | DWT_RESPONSE_EXPECTED);
 
         /* We assume that the transmission is achieved normally, now poll for reception of a frame or error/timeout. See NOTE 8 below. */
-        while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR)))
-        { };
+        waitforsysstatus(&status_reg, NULL, (DWT_INT_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR), 0);
 
-        if (status_reg & SYS_STATUS_RXFCG_BIT_MASK)
+        if (status_reg & DWT_INT_RXFCG_BIT_MASK)
         {
             /* Clear good RX frame event in the DW IC status register. */
-            dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG_BIT_MASK);
+            dwt_writesysstatuslo(DWT_INT_RXFCG_BIT_MASK);
 
             /* A frame has been received, check frame length is correct for ACK, then read and verify the ACK. */
-            frame_len = dwt_read32bitreg(RX_FINFO_ID) & RX_FINFO_RXFLEN_BIT_MASK;
+            frame_len = dwt_getframelength();
             if (frame_len == ACK_FRAME_LEN)
             {
                 dwt_readrxdata(rx_buffer, frame_len, 0);
 
                 /* Check if it is the expected ACK. */
-                if ((rx_buffer[FRAME_FC_IDX] == ACK_FC_0) && (rx_buffer[FRAME_FC_IDX + 1] == ACK_FC_1)
-                    && (rx_buffer[FRAME_SN_IDX] == tx_msg[FRAME_SN_IDX]))
+                if ((rx_buffer[FRAME_FC_IDX] == ACK_FC_0) && (rx_buffer[FRAME_FC_IDX + 1] == ACK_FC_1) && (rx_buffer[FRAME_SN_IDX] == tx_msg[FRAME_SN_IDX]))
                 {
                     tx_frame_acked = 1;
                     /* Execute a delay between transmissions. See NOTE 1 below. */
@@ -195,7 +193,7 @@ int ack_data_tx(void)
         else
         {
             /* Clear RX error/timeout events in the DW IC status register. */
-            dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
+            dwt_writesysstatuslo(SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
         }
 
         /* Update number of frames sent. */
@@ -203,7 +201,7 @@ int ack_data_tx(void)
 
         if (!tx_frame_acked)
         {
-            Sleep(TX_DELAY_MS/5);
+            Sleep(TX_DELAY_MS / 5);
             /* Update number of retransmissions. */
             tx_frame_retry_nb++;
         }

@@ -14,21 +14,21 @@
  *
  * @attention
  *
- * Copyright 2017-2020 (c) Decawave Ltd, Dublin, Ireland.
+ * Copyright 2017 - 2021 (c) Decawave Ltd, Dublin, Ireland.
  *
  * All rights reserved.
  *
  * @author Decawave
  */
 
+#include "deca_probe_interface.h"
+#include <config_options.h>
 #include <deca_device_api.h>
-#include <deca_regs.h>
 #include <deca_spi.h>
+#include <example_selection.h>
 #include <port.h>
 #include <shared_defines.h>
 #include <shared_functions.h>
-#include <example_selection.h>
-
 
 #if defined(TEST_DS_TWR_STS_SDC_INITIATOR)
 
@@ -43,7 +43,7 @@ extern void test_run_info(unsigned char *data);
 /* Default communication configuration. We use STS with SDC DW mode. */
 static dwt_config_t config = {
     5,               /* Channel number. */
-    DWT_PLEN_64,    /* Preamble length. Used in TX only. */
+    DWT_PLEN_64,     /* Preamble length. Used in TX only. */
     DWT_PAC8,        /* Preamble acquisition chunk size. Used in RX only. */
     9,               /* TX preamble code. Used in TX only. */
     9,               /* RX preamble code. Used in RX only. */
@@ -51,25 +51,25 @@ static dwt_config_t config = {
     DWT_BR_6M8,      /* Data rate. */
     DWT_PHRMODE_STD, /* PHY header mode. */
     DWT_PHRRATE_STD, /* PHY header rate. */
-    (65 + 8 - 8),   /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
+    (65 + 8 - 8),    /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
     DWT_STS_MODE_1 | DWT_STS_MODE_SDC, /* STS mode 1 with SDC see NOTE on SDC below*/
-    DWT_STS_LEN_64,/* STS length see allowed values in Enum dwt_sts_lengths_e */
-    DWT_PDOA_M0      /* PDOA mode off */
+    DWT_STS_LEN_64,                    /* STS length see allowed values in Enum dwt_sts_lengths_e */
+    DWT_PDOA_M0                        /* PDOA mode off */
 };
 /* Default antenna delay values for 64 MHz PRF. See NOTE 1 below. */
 #define TX_ANT_DLY 16385
 #define RX_ANT_DLY 16385
 
 /* Frames used in the ranging process. See NOTE 2 below. */
-static uint8_t tx_poll_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0x21};
-static uint8_t rx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0x10, 0x02, 0, 0};
-static uint8_t tx_final_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0x23, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+static uint8_t tx_poll_msg[] = { 0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0x21 };
+static uint8_t rx_resp_msg[] = { 0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0x10, 0x02, 0, 0 };
+static uint8_t tx_final_msg[] = { 0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0x23, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 /* Length of the common part of the message (up to and including the function code, see NOTE 2 below). */
 #define ALL_MSG_COMMON_LEN 10
 /* Indexes to access some of the fields in the frames defined above. */
-#define ALL_MSG_SN_IDX 2
-#define FINAL_MSG_POLL_TX_TS_IDX 10
-#define FINAL_MSG_RESP_RX_TS_IDX 14
+#define ALL_MSG_SN_IDX            2
+#define FINAL_MSG_POLL_TX_TS_IDX  10
+#define FINAL_MSG_RESP_RX_TS_IDX  14
 #define FINAL_MSG_FINAL_TX_TS_IDX 18
 /* Frame sequence number, incremented after each transmission. */
 static uint8_t frame_seq_nb = 0;
@@ -84,11 +84,11 @@ static uint32_t status_reg = 0;
 
 /* Delay between frames, in UWB microseconds. See NOTE 4 below. */
 /* This is the delay from the end of the frame transmission to the enable of the receiver, as programmed for the DW3000's wait for response feature. */
-#define POLL_TX_TO_RESP_RX_DLY_UUS 690
+#define POLL_TX_TO_RESP_RX_DLY_UUS (290 + CPU_PROCESSING_TIME)
 
-/* This is the delay from Frame RX timestamp to TX reply timestamp used for calculating/setting the DW3000's delayed TX function. This includes the
- * frame length of approximately 180 us with above configuration. */
-#define RESP_RX_TO_FINAL_TX_DLY_UUS 880
+/* This is the delay from Frame RX timestamp to TX reply timestamp used for calculating/setting the DW IC's delayed TX function.
+ * This value is required to be larger than POLL_TX_TO_RESP_RX_DLY_UUS. Please see NOTE 16 for more details. */
+#define RESP_RX_TO_FINAL_TX_DLY_UUS (480 + CPU_PROCESSING_TIME)
 /* Receive response timeout. See NOTE 5 below. */
 #define RESP_RX_TIMEOUT_UUS 300
 /* Preamble timeout, in multiple of PAC size. See NOTE 6 below. */
@@ -117,7 +117,7 @@ int ds_twr_sts_sdc_initiator(void)
     /* Display application name on LCD. */
     test_run_info((unsigned char *)APP_NAME);
 
-    /* Configure SPI rate, DW3000 supports up to 38 MHz */
+    /* Configure SPI rate, DW3000 supports up to 36 MHz */
     port_set_dw_ic_spi_fastrate();
 
     /* Reset DW IC */
@@ -125,22 +125,23 @@ int ds_twr_sts_sdc_initiator(void)
 
     Sleep(2); // Time needed for DW3000 to start up (transition from INIT_RC to IDLE_RC
 
-    while (!dwt_checkidlerc()) /* Need to make sure DW IC is in IDLE_RC before proceeding */
-    { };
+    /* Probe for the correct device driver. */
+    dwt_probe((struct dwt_probe_s *)&dw3000_probe_interf);
+
+    while (!dwt_checkidlerc()) /* Need to make sure DW IC is in IDLE_RC before proceeding */ { };
 
     if (dwt_initialise(DWT_DW_INIT) == DWT_ERROR)
     {
         test_run_info((unsigned char *)"INIT FAILED     ");
-        while (1)
-        { };
+        while (1) { };
     }
 
     /* Configure DW IC. See NOTE 15 below. */
-    if(dwt_configure(&config)) /* if the dwt_configure returns DWT_ERROR either the PLL or RX calibration has failed the host should reset the device */
+    /* if the dwt_configure returns DWT_ERROR either the PLL or RX calibration has failed the host should reset the device */
+    if (dwt_configure(&config))
     {
         test_run_info((unsigned char *)"CONFIG FAILED     ");
-        while (1)
-        { };
+        while (1) { };
     }
 
     /* Configure the TX spectrum parameters (power, PG delay and PG count) */
@@ -165,36 +166,36 @@ int ds_twr_sts_sdc_initiator(void)
 
         /* Write frame data to DW3000 and prepare transmission. See NOTE 8 below. */
         tx_poll_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
-        dwt_writetxdata(sizeof(tx_poll_msg), tx_poll_msg, 0); /* Zero offset in TX buffer. */
-        dwt_writetxfctrl(sizeof(tx_poll_msg)+FCS_LEN, 0, 1); /* Zero offset in TX buffer, ranging. */
+        dwt_writetxdata(sizeof(tx_poll_msg), tx_poll_msg, 0);  /* Zero offset in TX buffer. */
+        dwt_writetxfctrl(sizeof(tx_poll_msg) + FCS_LEN, 0, 1); /* Zero offset in TX buffer, ranging. */
 
-        //clear all events
-        dwt_write32bitreg(SYS_STATUS_ID, 0xFFFFFFFF);
+        // clear all events
+        dwt_writesysstatuslo(0xFFFFFFFF);
 
         /* Start transmission, indicating that a response is expected so that reception is enabled automatically after the frame is sent and the delay
          * set by dwt_setrxaftertxdelay() has elapsed. */
         dwt_starttx(DWT_START_TX_IMMEDIATE | DWT_RESPONSE_EXPECTED);
 
         /* We assume that the transmission is achieved correctly, poll for reception of a frame or error/timeout. See NOTE 9 below. */
-        while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR)))
-        { };
+        waitforsysstatus(&status_reg, NULL, (DWT_INT_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR), 0);
 
         /* Increment frame sequence number after transmission of the poll message (modulo 256). */
         frame_seq_nb++;
-        if (status_reg & SYS_STATUS_RXFCG_BIT_MASK)
+        if (status_reg & DWT_INT_RXFCG_BIT_MASK)
         {
-            uint32_t frame_len;
-            int16_t stsqual;
+            uint16_t frame_len;
+            int goodSts = 0;    /* Used for checking STS quality in received signal */
+            int16_t stsQual;    /* This will contain STS quality index */
+            uint16_t stsStatus; /* Used to check for good STS status (no errors). */
 
             /* Clear good RX frame event and TX frame sent in the DW3000 status register. */
-            dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_TXFRS_BIT_MASK);
+            dwt_writesysstatuslo(DWT_INT_RXFCG_BIT_MASK | DWT_INT_TXFRS_BIT_MASK);
 
-            //as STS is used, we only consider frames that are received with good STS quality
-            if(dwt_readstsquality(&stsqual))  //if STS is good this will be true >= 0
+            // As STS is used, we only consider frames that are received with good STS quality
+            if (((goodSts = dwt_readstsquality(&stsQual)) >= 0) && (dwt_readstsstatus(&stsStatus, 0) == DWT_SUCCESS)) // if STS is good this will be true >= 0
             {
-
                 /* A frame has been received, read it into the local buffer. */
-                frame_len = dwt_read32bitreg(RX_FINFO_ID) & RXFLEN_MASK;
+                frame_len = dwt_getframelength();
                 if (frame_len <= RX_BUF_LEN)
                 {
                     dwt_readrxdata(rx_buffer, frame_len, 0);
@@ -227,29 +228,28 @@ int ds_twr_sts_sdc_initiator(void)
                     /* Write and send final message. See NOTE 8 below. */
                     tx_final_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
                     dwt_writetxdata(sizeof(tx_final_msg), tx_final_msg, 0); /* Zero offset in TX buffer. */
-                    dwt_writetxfctrl(sizeof(tx_final_msg)+FCS_LEN, 0, 1); /* Zero offset in TX buffer, ranging. */
+                    dwt_writetxfctrl(sizeof(tx_final_msg) + FCS_LEN, 0, 1); /* Zero offset in TX buffer, ranging. */
                     ret = dwt_starttx(DWT_START_TX_DELAYED);
 
                     /* If dwt_starttx() returns an error, abandon this ranging exchange and proceed to the next one. See NOTE 12 below. */
                     if (ret == DWT_SUCCESS)
                     {
                         /* Poll DW3000 until TX frame sent event set. See NOTE 9 below. */
-                        while (!(dwt_read32bitreg(SYS_STATUS_ID) & SYS_STATUS_TXFRS_BIT_MASK))
-                        { };
+                        waitforsysstatus(NULL, NULL, DWT_INT_TXFRS_BIT_MASK, 0);
 
                         /* Clear TXFRS event. */
-                        dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);
+                        dwt_writesysstatuslo(DWT_INT_TXFRS_BIT_MASK);
 
                         /* Increment frame sequence number after transmission of the final message (modulo 256). */
                         frame_seq_nb++;
                     }
-                }//got good STS
+                } // got good STS
             }
         }
         else
         {
             /* Clear RX error/timeout events in the DW3000 status register. */
-            dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
+            dwt_writesysstatuslo(SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
         }
 
         /* Execute a delay between ranging exchanges. */
@@ -309,7 +309,7 @@ int ds_twr_sts_sdc_initiator(void)
  *    details about the timings involved in the ranging process.
  * 5. This timeout is for complete reception of a frame, i.e. timeout duration must take into account the length of the expected frame. Here the value
  *    is arbitrary but chosen large enough to make sure that there is enough time to receive the complete final frame sent by the responder at the
- *    6.81 Mbps data rate used (around 200 us).
+ *    6.81 Mbps data rate used (around 300 us).
  * 6. The preamble timeout allows the receiver to stop listening in situations where preamble is not starting (which might be because the responder is
  *    out of range or did not receive the message to respond to). This saves the power waste of listening for a message that is not coming. We
  *    recommend a minimum preamble timeout of 5 PACs for short range applications and a larger value (e.g. in the range of 50% to 80% of the preamble
@@ -339,8 +339,33 @@ int ds_twr_sts_sdc_initiator(void)
  *     awaiting the "final" and proceed to have its receiver on ready to poll of the following exchange.
  * 13. The user is referred to DecaRanging ARM application (distributed with EVK1000 product) for additional practical example of usage, and to the
  *     DW3000 API Guide for more details on the DW3000 driver functions.
- * 14. In this example, the DW IC is put into IDLE state after calling dwt_initialise(). This means that a fast SPI rate of up to 38 MHz can be used
+ * 14. In this example, the DW IC is put into IDLE state after calling dwt_initialise(). This means that a fast SPI rate of up to 36 MHz can be used
  *     thereafter.
  * 15. Desired configuration by user may be different to the current programmed configuratio.n dwt_configure is called to set desired
  *     configuration.
+ * 16. The receiver is enabled with reference to the timestamp of the previously received signal.
+ *     The receiver will start after a defined delay.
+ *     This defined delay is currently the same as the delay between the responder's received
+ *     timestamp of it's last received frame and the timestamp of the transmitted signal that is
+ *     sent in response.
+ *     This means that the initiator needs to reduce it's delay by the configured preamble length.
+ *     This allows for the receiver to enable on the initiator at the same time as responder is
+ *     transmitting it's message. It should look something like this:
+ *
+ *     Initiator: |Poll TX| ..... |Resp RX| ........ |Final TX|
+ *     Responder: |Poll RX| ..... |Resp TX| ........ |Final RX|
+ *                    ^|P RMARKER|                                    - time of Poll TX/RX
+ *                                    ^|R RMARKER|                    - time of Resp TX/RX
+ *                                                       ^|R RMARKER| - time of Final TX/RX
+ *
+ *                        <--TDLY->                                   - POLL_TX_TO_RESP_RX_DLY_UUS (RDLY-RLEN)
+ *                                <-RLEN->                            - RESP_RX_TIMEOUT_UUS   (length of poll frame)
+ *                     <----RDLY------>                               - POLL_RX_TO_RESP_TX_DLY_UUS (depends on how quickly responder
+ *                                                                                                                       can turn around and reply)
+ *
+ *
+ *                                         <--T2DLY->                 - RESP_TX_TO_FINAL_RX_DLY_UUS (R2DLY-FLEN)
+ *                                                   <-FLEN--->       - FINAL_RX_TIMEOUT_UUS   (length of response frame)
+ *                                     <----RDLY--------->            - RESP_RX_TO_FINAL_TX_DLY_UUS (depends on how quickly initiator
+ *                                                                                                                       can turn around and reply)
  ****************************************************************************************************************************************************/

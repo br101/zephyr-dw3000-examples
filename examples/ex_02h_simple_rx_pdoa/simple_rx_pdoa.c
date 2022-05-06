@@ -6,21 +6,20 @@
  *
  * @attention
  *
- * Copyright 2019 - 2020 (c) Decawave Ltd, Dublin, Ireland.
+ * Copyright 2019 - 2021 (c) Decawave Ltd, Dublin, Ireland.
  *
  * All rights reserved.
  *
  * @author Decawave
  */
 
+#include "deca_probe_interface.h"
 #include <deca_device_api.h>
-#include <deca_regs.h>
 #include <deca_spi.h>
+#include <example_selection.h>
 #include <port.h>
-#include <deca_vals.h>
 #include <shared_defines.h>
 #include <shared_functions.h>
-#include <example_selection.h>
 
 #if defined(TEST_SIMPLE_RX_PDOA)
 
@@ -33,32 +32,31 @@ static void rx_err_cb(const dwt_cb_data_t *cb_data);
 
 /* Default communication configuration. We use default non-STS DW mode. see note 2*/
 static dwt_config_t config = {
-        5,               /* Channel number. */
-        DWT_PLEN_128,     /* Preamble length. Used in TX only. */
-        DWT_PAC8,        /* Preamble acquisition chunk size. Used in RX only. */
-        9,               /* TX preamble code. Used in TX only. */
-        9,               /* RX preamble code. Used in RX only. */
-        1,               /* 0 to use standard 8 symbol SFD, 1 to use non-standard 8 symbol, 2 for non-standard 16 symbol SFD and 3 for 4z 8 symbol SDF type */
-        DWT_BR_6M8,      /* Data rate. */
-        DWT_PHRMODE_STD, /* PHY header mode. */
-        DWT_PHRRATE_STD, /* PHY header rate. */
-        (129 + 8 - 8),    /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
-        (DWT_STS_MODE_1 | DWT_STS_MODE_SDC), /* STS enabled */
-        DWT_STS_LEN_256, /* Cipher length see allowed values in Enum dwt_sts_lengths_e */
-        DWT_PDOA_M3      /* PDOA mode 3 */
+    5,               /* Channel number. */
+    DWT_PLEN_128,    /* Preamble length. Used in TX only. */
+    DWT_PAC8,        /* Preamble acquisition chunk size. Used in RX only. */
+    9,               /* TX preamble code. Used in TX only. */
+    9,               /* RX preamble code. Used in RX only. */
+    1,               /* 0 to use standard 8 symbol SFD, 1 to use non-standard 8 symbol, 2 for non-standard 16 symbol SFD and 3 for 4z 8 symbol SDF type */
+    DWT_BR_6M8,      /* Data rate. */
+    DWT_PHRMODE_STD, /* PHY header mode. */
+    DWT_PHRRATE_STD, /* PHY header rate. */
+    (129 + 8 - 8),   /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
+    (DWT_STS_MODE_1 | DWT_STS_MODE_SDC), /* STS enabled */
+    DWT_STS_LEN_256,                     /* Cipher length see allowed values in Enum dwt_sts_lengths_e */
+    DWT_PDOA_M3                          /* PDOA mode 3 */
 };
 
-
-int16_t   pdoa_val=0;
-uint8_t   pdoa_message_data[40];//Will hold the data to send to the virtual COM
+int16_t pdoa_val = 0;
+uint8_t pdoa_message_data[40]; // Will hold the data to send to the virtual COM
 
 /**
  * Application entry point.
  */
 int simple_rx_pdoa(void)
 {
-
-    int16_t   last_pdoa_val=0;
+    uint32_t dev_id;
+    int16_t last_pdoa_val = 0;
 
     /* Sends application name to test_run_info function. */
     test_run_info((unsigned char *)APP_NAME);
@@ -70,32 +68,35 @@ int simple_rx_pdoa(void)
 
     Sleep(2); // Time needed for DW3000 to start up (transition from INIT_RC to IDLE_RC
 
-    while (!dwt_checkidlerc()) /* Need to make sure DW IC is in IDLE_RC before proceeding */
-    { };
+    /* Probe for the correct device driver. */
+    dwt_probe((struct dwt_probe_s *)&dw3000_probe_interf);
+
+    dev_id = dwt_readdevid();
+
+    while (!dwt_checkidlerc()) /* Need to make sure DW IC is in IDLE_RC before proceeding */ { };
 
     if (dwt_initialise(DWT_DW_IDLE) == DWT_ERROR)
     {
         test_run_info((unsigned char *)"INIT FAILED");
-        while (1)
-        { };
+        while (1) { };
     }
 
     /* Configure DW3000. */
-    if(dwt_configure(&config)) /* if the dwt_configure returns DWT_ERROR either the PLL or RX calibration has failed the host should reset the device */
+    /* if the dwt_configure returns DWT_ERROR either the PLL or RX calibration has failed the host should reset the device */
+    if (dwt_configure(&config))
     {
         test_run_info((unsigned char *)"CONFIG FAILED     ");
-        while (1)
-        { };
+        while (1) { };
     }
 
     /* Register RX call-back. */
-    dwt_setcallbacks(NULL, rx_ok_cb, rx_err_cb, rx_err_cb, NULL, NULL);
+    dwt_setcallbacks(NULL, rx_ok_cb, rx_err_cb, rx_err_cb, NULL, NULL, NULL);
 
     /* Enable wanted interrupts (RX good frames and RX errors). */
-    dwt_setinterrupt(SYS_ENABLE_LO_RXFCG_ENABLE_BIT_MASK | SYS_STATUS_ALL_RX_ERR, 0, DWT_ENABLE_INT);
+    dwt_setinterrupt(DWT_INT_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_ERR, 0, DWT_ENABLE_INT);
 
     /*Clearing the SPI ready interrupt*/
-    dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RCINIT_BIT_MASK | SYS_STATUS_SPIRDY_BIT_MASK);
+    dwt_writesysstatuslo(DWT_INT_RCINIT_BIT_MASK | DWT_INT_SPIRDY_BIT_MASK);
 
     /* Install DW IC IRQ handler. */
     port_set_dwic_isr(dwt_isr);
@@ -106,17 +107,15 @@ int simple_rx_pdoa(void)
     /*loop forever receiving frames*/
     while (1)
     {
-        if (last_pdoa_val!=pdoa_val)
+        if (last_pdoa_val != pdoa_val)
         {
-            last_pdoa_val=pdoa_val;
-            sprintf((char *)&pdoa_message_data,"PDOA val = %d",last_pdoa_val);
+            last_pdoa_val = pdoa_val;
+            sprintf((char *)&pdoa_message_data, "PDOA val = %d", last_pdoa_val);
             test_run_info((unsigned char *)&pdoa_message_data);
         }
-
     }
     return DWT_SUCCESS;
 }
-
 
 /*! ------------------------------------------------------------------------------------------------------------------
  * @fn rx_ok_cb()
@@ -129,16 +128,14 @@ int simple_rx_pdoa(void)
  */
 static void rx_ok_cb(const dwt_cb_data_t *cb_data)
 {
-    int16_t cpqual;
-#ifdef NRF52840_XXAA
-    UNUSED_PARAMETER(cb_data);
-#else
-    UNUSED(cb_data);
-#endif //NRF52840_XXAA
-    //checking STS quality see note 4
-    if(dwt_readstsquality(&cpqual))
+    int goodSts = 0; /* Used for checking STS quality in received signal */
+    int16_t stsQual; /* This will contain STS quality index */
+
+    (void)cb_data;
+    // Checking STS quality and STS status. See note 4
+    if (((goodSts = dwt_readstsquality(&stsQual)) >= 0))
     {
-        pdoa_val=dwt_readpdoa();
+        pdoa_val = dwt_readpdoa();
     }
     dwt_rxenable(DWT_START_RX_IMMEDIATE);
 }
@@ -154,11 +151,7 @@ static void rx_ok_cb(const dwt_cb_data_t *cb_data)
  */
 static void rx_err_cb(const dwt_cb_data_t *cb_data)
 {
-#ifdef NRF52840_XXAA
-    UNUSED_PARAMETER(cb_data);
-#else
-    UNUSED(cb_data);
-#endif //NRF52840_XXAA
+    (void)cb_data;
     dwt_rxenable(DWT_START_RX_IMMEDIATE);
 }
 

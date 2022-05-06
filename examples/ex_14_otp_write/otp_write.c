@@ -4,27 +4,27 @@
  *
  * @attention
  *
- * Copyright 2018-2020 (c) Decawave Ltd, Dublin, Ireland.
+ * Copyright 2018 - 2021 (c) Decawave Ltd, Dublin, Ireland.
  *
  * All rights reserved.
  *
  * @author Decawave
  */
 
-#include <stdio.h>
+#include "deca_probe_interface.h"
 #include <deca_device_api.h>
-#include <port.h>
 #include <example_selection.h>
-
+#include <port.h>
+#include <stdio.h>
 
 #if defined(TEST_OTP_WRITE)
 
 extern void test_run_info(unsigned char *data);
 
 /* Example application name and version to display on LCD screen/VCOM port. */
-#define APP_NAME "OTP Write      "
-#define OTP_ADDRESS     0x50 //Address to write - OTP
-#define OTP_DATA        0x87654321//Data to write - OTP
+#define APP_NAME    "OTP Write      "
+#define OTP_ADDRESS 0x50 // Address to write - OTP
+#define OTP_DATA    0x87654321 // Data to write - OTP
 
 /**
  * Application entry point.
@@ -35,7 +35,7 @@ int otp_write(void)
     /* Display application name on LCD. */
     test_run_info((unsigned char *)APP_NAME);
 
-    /* Configure SPI rate, DW3000 supports up to 38 MHz */
+    /* Configure SPI rate, DW3000 supports up to 36 MHz */
     port_set_dw_ic_spi_fastrate();
 
     /* Reset DW IC */
@@ -43,8 +43,11 @@ int otp_write(void)
 
     Sleep(2); // Time needed for DW3000 to start up (transition from INIT_RC to IDLE_RC, or could wait for SPIRDY event)
 
-    err=dwt_otpwriteandverify(OTP_DATA,OTP_ADDRESS);
-    if (err==DWT_SUCCESS)
+    /* Probe for the correct device driver. */
+    dwt_probe((struct dwt_probe_s *)&dw3000_probe_interf);
+
+    err = dwt_otpwriteandverify(OTP_DATA, OTP_ADDRESS);
+    if (err == DWT_SUCCESS)
     {
         test_run_info((unsigned char *)"OTP write PASS");
     }

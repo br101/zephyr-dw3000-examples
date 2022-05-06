@@ -38,21 +38,21 @@
  *
  * @attention
  *
- * Copyright 2019 - 2020 (c) Decawave Ltd, Dublin, Ireland.
+ * Copyright 2019 - 2021 (c) Decawave Ltd, Dublin, Ireland.
  *
  * All rights reserved.
  *
  * @author Decawave
  */
-#include <stdlib.h>
+#include "deca_probe_interface.h"
+#include <config_options.h>
 #include <deca_device_api.h>
-#include <deca_regs.h>
 #include <deca_spi.h>
+#include <example_selection.h>
 #include <port.h>
 #include <shared_defines.h>
 #include <shared_functions.h>
-#include <example_selection.h>
-#include <config_options.h>
+#include <stdlib.h>
 
 #if defined(TEST_SS_TWR_RESPONDER_STS_NO_DATA)
 
@@ -69,12 +69,12 @@ extern void test_run_info(unsigned char *data);
 #define RX_ANT_DLY 16385
 
 /* Frames used in the ranging process. See NOTE 3 below. */
-static uint8_t tx_report_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+static uint8_t tx_report_msg[] = { 0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 /* Length of the common part of the frame (up to and including the function code, see NOTE 3 below). */
 #define ALL_MSG_COMMON_LEN 10
 /* Index to access some of the fields in the frames involved in the process. */
-#define ALL_MSG_SN_IDX 2
+#define ALL_MSG_SN_IDX            2
 #define REPORT_MSG_POLL_RX_TS_IDX 10
 #define REPORT_MSG_RESP_TX_TS_IDX 14
 /* Frame sequence number, incremented after each transmission. */
@@ -84,17 +84,16 @@ static uint8_t frame_seq_nb = 0;
 static uint32_t status_reg = 0;
 
 /* Delay between frames, in UWB microseconds. See NOTE 1 below. */
-#define POLL_RX_TO_RESP_TX_DLY_UUS (550 + CPU_COMP)
+#define POLL_RX_TO_RESP_TX_DLY_UUS (550 + CPU_PROCESSING_TIME)
 
 /* Timestamps of frames transmission/reception. */
 static uint64_t poll_rx_ts;
 static uint64_t resp_tx_ts;
 
 /* Hold the amount of errors that have occurred */
-static uint32_t errors[23] = {0};
+static uint32_t errors[23] = { 0 };
 
 extern dwt_config_t config_option_sp3;
-extern dwt_config_t config_option_sp0;
 
 /* Externally declared structures for TX configuration. */
 extern dwt_txconfig_t txconfig_options;
@@ -109,10 +108,7 @@ extern dwt_txconfig_t txconfig_options_ch9;
  *
  * Here we use a default KEY as specified in the IEEE 802.15.4z annex
  */
-static dwt_sts_cp_key_t cp_key =
-{
-        0x14EB220F,0xF86050A8,0xD1D336AA,0x14148674
-};
+static dwt_sts_cp_key_t cp_key = { 0x14EB220F, 0xF86050A8, 0xD1D336AA, 0x14148674 };
 
 /*
  * 128-bit initial value for the nonce to be programmed into the CP_IV register.
@@ -124,10 +120,7 @@ static dwt_sts_cp_key_t cp_key =
  *
  * Here we use a default IV as specified in the IEEE 802.15.4z annex
  */
-static dwt_sts_cp_iv_t cp_iv =
-{
-        0x1F9A3DE4,0xD37EC3CA,0xC44FA8FB,0x362EEB34
-};
+static dwt_sts_cp_iv_t cp_iv = { 0x1F9A3DE4, 0xD37EC3CA, 0xC44FA8FB, 0x362EEB34 };
 
 /*! ------------------------------------------------------------------------------------------------------------------
  * @fn ss_twr_responder_sts()
@@ -140,14 +133,15 @@ static dwt_sts_cp_iv_t cp_iv =
  */
 int ss_twr_responder_sts_no_data(void)
 {
-    int16_t stsQual; /* This will contain STS quality index and status */
-    int goodSts = 0; /* Used for checking STS quality in received signal */
+    int goodSts = 0;    /* Used for checking STS quality in received signal */
+    int16_t stsQual;    /* This will contain STS quality index */
+    uint16_t stsStatus; /* Used to check for good STS status (no errors). */
     uint8_t firstLoopFlag = 0;
 
     /* Display application name on UART. */
     test_run_info((unsigned char *)APP_NAME);
 
-    /* Configure SPI rate, DW3000 supports up to 38 MHz */
+    /* Configure SPI rate, DW3000 supports up to 36 MHz */
 #ifdef CONFIG_SPI_FAST_RATE
     port_set_dw_ic_spi_fastrate();
 #endif /* CONFIG_SPI_FAST_RATE */
@@ -160,19 +154,20 @@ int ss_twr_responder_sts_no_data(void)
 
     Sleep(2); // Time needed for DW3000 to start up (transition from INIT_RC to IDLE_RC)
 
-    while (!dwt_checkidlerc()) /* Need to make sure DW IC is in IDLE_RC before proceeding */
-    { };
+    /* Probe for the correct device driver. */
+    dwt_probe((struct dwt_probe_s *)&dw3000_probe_interf);
+
+    while (!dwt_checkidlerc()) /* Need to make sure DW IC is in IDLE_RC before proceeding */ { };
 
     if (dwt_initialise(DWT_DW_IDLE) == DWT_ERROR)
     {
         test_run_info((unsigned char *)"INIT FAILED     ");
-        while (1)
-        { };
+        while (1) { };
     }
 
     /* Enabling LEDs here for debug so that for each TX the D1 LED will flash on DW3000 red eval-shield boards.
      * Note, in real low power applications the LEDs should not be used. */
-    dwt_setleds(DWT_LEDS_ENABLE | DWT_LEDS_INIT_BLINK) ;
+    dwt_setleds(DWT_LEDS_ENABLE | DWT_LEDS_INIT_BLINK);
 
     /* Apply default antenna delay value. See NOTE 2 below. */
     dwt_setrxantennadelay(RX_ANT_DLY);
@@ -182,15 +177,15 @@ int ss_twr_responder_sts_no_data(void)
     dwt_setlnapamode(DWT_LNA_ENABLE | DWT_PA_ENABLE);
 
     /* Configure DW IC. See NOTE 12 below. */
-    if(dwt_configure(&config_option_sp3)) /* if the dwt_configure returns DWT_ERROR either the PLL or RX calibration has failed the host should reset the device */
+    /* if the dwt_configure returns DWT_ERROR either the PLL or RX calibration has failed the host should reset the device */
+    if (dwt_configure(&config_option_sp3))
     {
         test_run_info((unsigned char *)"CONFIG FAILED     ");
-        while (1)
-        { };
+        while (1) { };
     }
 
     /* Configure the TX spectrum parameters (power, PG delay and PG count) */
-    if(config_option_sp3.chan == 5)
+    if (config_option_sp3.chan == 5)
     {
         dwt_configuretxrf(&txconfig_options);
     }
@@ -222,7 +217,7 @@ int ss_twr_responder_sts_no_data(void)
             /*
              * On subsequent loops, we only need to reload the lower 32 bits of STS IV.
              */
-            dwt_writetodevice(STS_IV0_ID, 0, 4, (uint8_t *)&cp_iv);
+            dwt_configurestsiv(&cp_iv);
             dwt_configurestsloadiv();
         }
 
@@ -231,8 +226,7 @@ int ss_twr_responder_sts_no_data(void)
 
         /* Poll for reception of a packet or error/timeout. See NOTE 5 below. */
         /* STS Mode 3 packets are polled for differently than STS Mode 0 frames */
-        while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFR_BIT_MASK | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_ND_RX_ERR)))
-        { };
+        waitforsysstatus(&status_reg, NULL, (DWT_INT_RXFR_BIT_MASK | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_ND_RX_ERR), 0);
 
         /*
          * Need to check the STS has been received and is good.
@@ -245,12 +239,12 @@ int ss_twr_responder_sts_no_data(void)
          * to see if the packet has been received correctly and the quality of the STS is good.
          * When using No Data STS mode we do not get RXFCG but RXFR
          */
-        if (status_reg & SYS_STATUS_RXFR_BIT_MASK)
+        if (status_reg & DWT_INT_RXFR_BIT_MASK)
         {
             /*
              * Checking for the SP3 mode POLL packet
              */
-            if (goodSts >= 0)
+            if ((goodSts >= 0) && (dwt_readstsstatus(&stsStatus, 0) == DWT_SUCCESS))
             {
                 uint32_t resp_tx_time, report_tx_time;
                 int ret;
@@ -259,19 +253,20 @@ int ss_twr_responder_sts_no_data(void)
                 poll_rx_ts = get_rx_timestamp_u64();
 
                 /* Calculate the required delay time before sending the RESP packet. */
-                resp_tx_time = (poll_rx_ts                               /* Received timestamp value */
-                        + ((POLL_RX_TO_RESP_TX_DLY_UUS                   /* Set delay time */
-                                + get_rx_delay_time_data_rate()          /* Added delay time for data rate set */
-                                + get_rx_delay_time_txpreamble()         /* Added delay for TX preamble length */
-                                + ((1<<(config_option_sp3.stsLength+2))*8)) /* Added delay for STS length */
-                                * UUS_TO_DWT_TIME)) >> 8;                /* Converted to time units for chip */
+                resp_tx_time = (poll_rx_ts                                                  /* Received timestamp value */
+                                   + ((POLL_RX_TO_RESP_TX_DLY_UUS                           /* Set delay time */
+                                          + get_rx_delay_time_data_rate()                   /* Added delay time for data rate set */
+                                          + get_rx_delay_time_txpreamble()                  /* Added delay for TX preamble length */
+                                          + ((1 << (config_option_sp3.stsLength + 2)) * 8)) /* Added delay for STS length */
+                                       * UUS_TO_DWT_TIME))
+                               >> 8; /* Converted to time units for chip */
                 dwt_setdelayedtrxtime(resp_tx_time);
 
                 /* Response TX timestamp is the transmission time we programmed plus the antenna delay. */
                 resp_tx_ts = (((uint64_t)(resp_tx_time & 0xFFFFFFFEUL)) << 8) + TX_ANT_DLY;
 
                 /* Send the SP3 RESP packet. */
-                dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);
+                dwt_writesysstatuslo(DWT_INT_TXFRS_BIT_MASK);
                 dwt_writetxfctrl(0, 0, 1); /* Zero offset in TX buffer, ranging. */
                 ret = dwt_starttx(DWT_START_TX_DELAYED);
 
@@ -279,12 +274,10 @@ int ss_twr_responder_sts_no_data(void)
                 if (ret == DWT_SUCCESS)
                 {
                     /* Poll DW IC until TX packet sent event set. See NOTE 5 below. */
-                    while (!(dwt_read32bitreg(SYS_STATUS_ID) & SYS_STATUS_TXFRS_BIT_MASK))
-                    { };
+                    waitforsysstatus(NULL, NULL, DWT_INT_TXFRS_BIT_MASK, 0);
 
                     /* Clear TXFRS event. */
-                    dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);
-
+                    dwt_writesysstatuslo(DWT_INT_TXFRS_BIT_MASK);
 
                     /*
                      * Now reconfigure device to SP0 mode and send REPORT frame
@@ -293,12 +286,13 @@ int ss_twr_responder_sts_no_data(void)
                     dwt_configurestsmode(DWT_STS_MODE_OFF);
 
                     /* Set the delay to be twice the previous time period with respect to the RX timestamp of the POLL packet. */
-                    report_tx_time = (poll_rx_ts                               /* Received timestamp value */
-                            + ((((POLL_RX_TO_RESP_TX_DLY_UUS) * 2)             /* Set delay time */
-                                    + (get_rx_delay_time_data_rate() * 2)    /* Added delay time for data rate set */
-                                    + (get_rx_delay_time_txpreamble() * 2)   /* Added delay for TX preamble length */
-                                    + (((1<<(config_option_sp3.stsLength+2))*8)) * 2) /* Added delay for STS length */
-                                    * UUS_TO_DWT_TIME)) >> 8;                /* Converted to time units for chip */
+                    report_tx_time = (poll_rx_ts                                                        /* Received timestamp value */
+                                         + ((((POLL_RX_TO_RESP_TX_DLY_UUS)*2)                           /* Set delay time */
+                                                + (get_rx_delay_time_data_rate() * 2)                   /* Added delay time for data rate set */
+                                                + (get_rx_delay_time_txpreamble() * 2)                  /* Added delay for TX preamble length */
+                                                + (((1 << (config_option_sp3.stsLength + 2)) * 8)) * 2) /* Added delay for STS length */
+                                             * UUS_TO_DWT_TIME))
+                                     >> 8; /* Converted to time units for chip */
                     dwt_setdelayedtrxtime(report_tx_time);
 
                     /* Write all timestamps in the report frame. See NOTE 6 & 7 below. */
@@ -309,18 +303,17 @@ int ss_twr_responder_sts_no_data(void)
                     tx_report_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
 
                     dwt_writetxdata(sizeof(tx_report_msg), tx_report_msg, 0); /* Zero offset in TX buffer. */
-                    dwt_writetxfctrl(sizeof(tx_report_msg), 0, 0); /* Zero offset in TX buffer, not ranging. */
+                    dwt_writetxfctrl(sizeof(tx_report_msg), 0, 0);            /* Zero offset in TX buffer, not ranging. */
                     ret = dwt_starttx(DWT_START_TX_DELAYED);
 
                     /* If dwt_starttx() returns an error, abandon this ranging exchange and proceed to the next one. See NOTE 9 & 10 below. */
                     if (ret == DWT_SUCCESS)
                     {
                         /* Poll DW IC until TX frame sent event set. See NOTE 5 below. */
-                        while (!(dwt_read32bitreg(SYS_STATUS_ID) & SYS_STATUS_TXFRS_BIT_MASK))
-                        { };
+                        waitforsysstatus(NULL, NULL, DWT_INT_TXFRS_BIT_MASK, 0);
 
                         /* Clear TXFRS event. */
-                        dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);
+                        dwt_writesysstatuslo(DWT_INT_TXFRS_BIT_MASK);
 
                         /* Increment frame sequence number after transmission of the report frame (modulo 256). */
                         frame_seq_nb++;
@@ -335,7 +328,7 @@ int ss_twr_responder_sts_no_data(void)
             {
                 errors[PREAMBLE_COUNT_ERR_IDX] += 1;
                 /* Clear RX error events in the DW IC status register. */
-                dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_ERR);
+                dwt_writesysstatuslo(SYS_STATUS_ALL_RX_ERR);
             }
         }
         else
@@ -351,7 +344,7 @@ int ss_twr_responder_sts_no_data(void)
                 errors[CP_QUAL_ERR_IDX] += 1;
             }
             /* Clear RX error events in the DW IC status register. */
-            dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_ERR);
+            dwt_writesysstatuslo(SYS_STATUS_ALL_RX_ERR);
         }
     }
 }

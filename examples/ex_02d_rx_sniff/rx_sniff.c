@@ -4,20 +4,20 @@
  *
  * @attention
  *
- * Copyright 2016-2020 (c) Decawave Ltd, Dublin, Ireland.
+ * Copyright 2016 - 2021 (c) Decawave Ltd, Dublin, Ireland.
  *
  * All rights reserved.
  *
  * @author Decawave
  */
-#include <string.h>
+#include "deca_probe_interface.h"
 #include <deca_device_api.h>
-#include <deca_regs.h>
 #include <deca_spi.h>
-#include <port.h>
 #include <example_selection.h>
+#include <port.h>
 #include <shared_defines.h>
-
+#include <shared_functions.h>
+#include <string.h>
 
 #if defined(TEST_RX_SNIFF)
 
@@ -28,28 +28,27 @@ extern void test_run_info(unsigned char *data);
 
 /* Default communication configuration. We use default non-STS DW mode. */
 static dwt_config_t config = {
-    5,               /* Channel number. */
-    DWT_PLEN_128,    /* Preamble length. Used in TX only. */
-    DWT_PAC8,        /* Preamble acquisition chunk size. Used in RX only. */
-    9,               /* TX preamble code. Used in TX only. */
-    9,               /* RX preamble code. Used in RX only. */
-    1,               /* 0 to use standard 8 symbol SFD, 1 to use non-standard 8 symbol, 2 for non-standard 16 symbol SFD and 3 for 4z 8 symbol SDF type */
-    DWT_BR_6M8,      /* Data rate. */
-    DWT_PHRMODE_STD, /* PHY header mode. */
-    DWT_PHRRATE_STD, /* PHY header rate. */
-    (129 + 8 - 8),   /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
-    DWT_STS_MODE_OFF,/* STS disabled */
-    DWT_STS_LEN_64,  /* STS length see allowed values in Enum dwt_sts_lengths_e */
-    DWT_PDOA_M0      /* PDOA mode off */
+    5,                /* Channel number. */
+    DWT_PLEN_128,     /* Preamble length. Used in TX only. */
+    DWT_PAC8,         /* Preamble acquisition chunk size. Used in RX only. */
+    9,                /* TX preamble code. Used in TX only. */
+    9,                /* RX preamble code. Used in RX only. */
+    1,                /* 0 to use standard 8 symbol SFD, 1 to use non-standard 8 symbol, 2 for non-standard 16 symbol SFD and 3 for 4z 8 symbol SDF type */
+    DWT_BR_6M8,       /* Data rate. */
+    DWT_PHRMODE_STD,  /* PHY header mode. */
+    DWT_PHRRATE_STD,  /* PHY header rate. */
+    (129 + 8 - 8),    /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
+    DWT_STS_MODE_OFF, /* STS disabled */
+    DWT_STS_LEN_64,   /* STS length see allowed values in Enum dwt_sts_lengths_e */
+    DWT_PDOA_M0       /* PDOA mode off */
 };
-
 
 /* SNIFF mode on/off times.
  * ON time is expressed in multiples of PAC size (with the IC adding 1 PAC automatically). So the ON time of 1 here gives 2 PAC times and, since the
  * configuration (above) specifies DWT_PAC8, we get an ON time of 2x8 symbols, or around 16 탎.
  * OFF time is expressed in multiples of 128/125 탎 (~1 탎).
  * These values will lead to a roughly 50% duty-cycle, each ON and OFF phase lasting for about 16 탎. */
-#define SNIFF_ON_TIME 2
+#define SNIFF_ON_TIME  2
 #define SNIFF_OFF_TIME 16
 
 /* Buffer to store received frame. See NOTE 1 below. */
@@ -69,7 +68,7 @@ int rx_sniff(void)
     /* Display application name on LCD. */
     test_run_info((unsigned char *)APP_NAME);
 
-    /* Configure SPI rate, DW3000 supports up to 38 MHz */
+    /* Configure SPI rate, DW3000 supports up to 36 MHz */
     port_set_dw_ic_spi_fastrate();
 
     /* Reset DW IC */
@@ -77,25 +76,26 @@ int rx_sniff(void)
 
     Sleep(2); // Time needed for DW3000 to start up (transition from INIT_RC to IDLE_RC, or could wait for SPIRDY event)
 
-    while (!dwt_checkidlerc()) /* Need to make sure DW IC is in IDLE_RC before proceeding */
-    { };
+    /* Probe for the correct device driver. */
+    dwt_probe((struct dwt_probe_s *)&dw3000_probe_interf);
+
+    while (!dwt_checkidlerc()) /* Need to make sure DW IC is in IDLE_RC before proceeding */ { };
 
     if (dwt_initialise(DWT_DW_INIT) == DWT_ERROR)
     {
         test_run_info((unsigned char *)"INIT FAILED     ");
-        while (1)
-        { };
+        while (1) { };
     }
 
     /* This is put here for testing, so that we can see the receiver ON/OFF pattern using an oscilloscope. */
     dwt_setlnapamode(DWT_LNA_ENABLE | DWT_PA_ENABLE);
 
     /* Configure DW IC. */
-    if(dwt_configure(&config)) /* if the dwt_configure returns DWT_ERROR either the PLL or RX calibration has failed the host should reset the device */
+    /* if the dwt_configure returns DWT_ERROR either the PLL or RX calibration has failed the host should reset the device */
+    if (dwt_configure(&config))
     {
         test_run_info((unsigned char *)"CONFIG FAILED     ");
-        while (1)
-        { };
+        while (1) { };
     }
 
     /* Configure SNIFF mode. */
@@ -104,7 +104,7 @@ int rx_sniff(void)
     /* Loop forever receiving frames. */
     while (1)
     {
-        int i=0;
+        int i = 0;
 
         /* TESTING BREAKPOINT LOCATION #1 */
 
@@ -112,7 +112,7 @@ int rx_sniff(void)
          * the RX buffer.
          * This is a good place to put a breakpoint. Here (after first time through the loop) the local status register will be set for last event
          * and if a good receive has happened the data buffer will have the data in it, and frame_len will be set to the length of the RX frame. */
-        for (i = 0 ; i < FRAME_LEN_MAX; i++ )
+        for (i = 0; i < FRAME_LEN_MAX; i++)
         {
             rx_buffer[i] = 0;
         }
@@ -122,17 +122,15 @@ int rx_sniff(void)
 
         /* Poll until a frame is properly received or an RX error occurs. See NOTE 4 below.
          * STATUS register is 5 bytes long but we are not interested in the high byte here, so we read a more manageable 32-bits with this API call. */
-        while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_ERR)))
-        {
-        };
+        waitforsysstatus(&status_reg, NULL, (DWT_INT_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_ERR), 0);
 
-        if (status_reg & SYS_STATUS_RXFCG_BIT_MASK)
+        if (status_reg & DWT_INT_RXFCG_BIT_MASK)
         {
             /* Clear good RX frame event in the DW IC status register. */
-            dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG_BIT_MASK);
+            dwt_writesysstatuslo(DWT_INT_RXFCG_BIT_MASK);
 
             /* A frame has been received, copy it to our local buffer. */
-            frame_len = dwt_read32bitreg(RX_FINFO_ID) & RX_FINFO_RXFLEN_BIT_MASK;
+            frame_len = dwt_getframelength();
             if (frame_len <= FRAME_LEN_MAX)
             {
                 dwt_readrxdata(rx_buffer, frame_len, 0);
@@ -141,7 +139,7 @@ int rx_sniff(void)
         else
         {
             /* Clear RX error events in the DW IC status register. */
-            dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_ERR);
+            dwt_writesysstatuslo(SYS_STATUS_ALL_RX_ERR);
         }
     }
 }

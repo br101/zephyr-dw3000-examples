@@ -7,18 +7,17 @@
  *
  * @attention
  *
- * Copyright 2015-2020 (c) Decawave Ltd, Dublin, Ireland.
+ * Copyright 2015 - 2021 (c) Decawave Ltd, Dublin, Ireland.
  *
  * All rights reserved.
  *
  * @author Decawave
  */
+#include "deca_probe_interface.h"
 #include <deca_device_api.h>
-#include <deca_regs.h>
 #include <deca_spi.h>
-#include <port.h>
 #include <example_selection.h>
-
+#include <port.h>
 
 #if defined(TEST_CONTINUOUS_FRAME)
 
@@ -35,19 +34,19 @@ extern void test_run_info(unsigned char *data);
 
 /* Default communication configuration. See NOTE 1 below. */
 static dwt_config_t config = {
-    5,               /* Channel number. */
-    DWT_PLEN_128,    /* Preamble length. Used in TX only. */
-    DWT_PAC8,        /* Preamble acquisition chunk size. Used in RX only. */
-    9,               /* TX preamble code. Used in TX only. */
-    9,               /* RX preamble code. Used in RX only. */
-    1,               /* 0 to use standard 8 symbol SFD, 1 to use non-standard 8 symbol, 2 for non-standard 16 symbol SFD and 3 for 4z 8 symbol SDF type */
-    DWT_BR_6M8,      /* Data rate. */
-    DWT_PHRMODE_STD, /* PHY header mode. */
-    DWT_PHRRATE_STD, /* PHY header rate. */
-    (129 + 8 - 8),   /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
-    DWT_STS_MODE_OFF,/* STS disabled */
-    DWT_STS_LEN_64,  /* STS length see allowed values in Enum dwt_sts_lengths_e */
-    DWT_PDOA_M0      /* PDOA mode off */
+    5,                /* Channel number. */
+    DWT_PLEN_128,     /* Preamble length. Used in TX only. */
+    DWT_PAC8,         /* Preamble acquisition chunk size. Used in RX only. */
+    9,                /* TX preamble code. Used in TX only. */
+    9,                /* RX preamble code. Used in RX only. */
+    1,                /* 0 to use standard 8 symbol SFD, 1 to use non-standard 8 symbol, 2 for non-standard 16 symbol SFD and 3 for 4z 8 symbol SDF type */
+    DWT_BR_6M8,       /* Data rate. */
+    DWT_PHRMODE_STD,  /* PHY header mode. */
+    DWT_PHRRATE_STD,  /* PHY header rate. */
+    (129 + 8 - 8),    /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
+    DWT_STS_MODE_OFF, /* STS disabled */
+    DWT_STS_LEN_64,   /* STS length see allowed values in Enum dwt_sts_lengths_e */
+    DWT_PDOA_M0       /* PDOA mode off */
 };
 
 /* Recommended TX power and Pulse Generator delay values for Channel 5 and 64 MHz PRF as selected in the configuration above. See NOTE 2 below. */
@@ -60,7 +59,7 @@ extern dwt_txconfig_t txconfig_options;
  *     - byte 2 -> 9: device ID, hard coded constant in this example for simplicity.
  *     - byte 10/11: frame check-sum, automatically set by DW IC in a normal transmission and set to 0 here for simplicity.
  * See NOTEs 1 and 3 below. */
-static uint8_t tx_msg[] = {0xC5, 0, 'D', 'E', 'C', 'A', 'W', 'A', 'V', 'E', 0, 0};
+static uint8_t tx_msg[] = { 0xC5, 0, 'D', 'E', 'C', 'A', 'W', 'A', 'V', 'E', 0, 0 };
 
 /**
  * Application entry point.
@@ -70,7 +69,7 @@ int continuous_frame_example(void)
     /* Display application name on LCD. */
     test_run_info((unsigned char *)APP_NAME);
 
-    /* Configure SPI rate, DW3000 supports up to 38 MHz */
+    /* Configure SPI rate, DW3000 supports up to 36 MHz */
     port_set_dw_ic_spi_fastrate();
 
     /* Reset DW IC */
@@ -78,43 +77,50 @@ int continuous_frame_example(void)
 
     Sleep(2); // Time needed for DW3000 to start up (transition from INIT_RC to IDLE_RC
 
-    while (!dwt_checkidlerc()) /* Need to make sure DW IC is in IDLE_RC before proceeding */
-    { };
+    /* Probe for the correct device driver. */
+    dwt_probe((struct dwt_probe_s *)&dw3000_probe_interf);
+
+    while (!dwt_checkidlerc()) /* Need to make sure DW IC is in IDLE_RC before proceeding */ { };
 
     if (dwt_initialise(DWT_DW_INIT) == DWT_ERROR)
     {
         test_run_info((unsigned char *)"INIT FAILED     ");
-        while (1)
-        { };
+        while (1) { };
     }
 
     /* Configure DW IC. */
-    if(dwt_configure(&config)) /* if the dwt_configure returns DWT_ERROR either the PLL or RX calibration has failed the host should reset the device */
+    /* if the dwt_configure returns DWT_ERROR either the PLL or RX calibration has failed the host should reset the device */
+    if (dwt_configure(&config))
     {
         test_run_info((unsigned char *)"CONFIG FAILED     ");
-        while (1)
-        { };
+        while (1) { };
     }
     dwt_configuretxrf(&txconfig_options);
 
     /* Activate continuous frame mode. */
-    dwt_configcontinuousframemode(CONT_FRAME_PERIOD, config.chan);
+    dwt_configcontinuousframemode(CONT_FRAME_PERIOD);
 
     /* Once configured, continuous frame must be started like a normal transmission. */
     dwt_writetxdata(sizeof(tx_msg), tx_msg, 0); /* Zero offset in TX buffer. */
-    dwt_writetxfctrl(sizeof(tx_msg), 0, 0); /* Zero offset in TX buffer, no ranging. */
+    dwt_writetxfctrl(sizeof(tx_msg), 0, 0);     /* Zero offset in TX buffer, no ranging. */
     dwt_starttx(DWT_START_TX_IMMEDIATE);
 
     /* Wait for the required period of repeated transmission. */
     Sleep(CONT_FRAME_DURATION_MS);
 
+    /* Disable continuous frame mode. */
+    dwt_disablecontinuousframemode();
+
+    /* BREAKPOINT */
+    /* Add a breakpoint here (before the soft reset) to see the continuous frame stop. */
+    /* This would be useful if you are monitoring the waveform on a spectrum analyser. */
+
     /* Software reset of the DW IC to deactivate continuous frame mode and go back to default state. Initialisation and configuration should be run
      * again if one wants to get the DW IC back to normal operation. */
-    dwt_softreset();
+    dwt_softreset(1);
 
     /* End here. */
-    while (1)
-    { };
+    while (1) { };
 }
 #endif
 /*****************************************************************************************************************************************************

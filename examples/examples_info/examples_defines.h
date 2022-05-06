@@ -2,17 +2,15 @@
 #define TESTS_DEFINES_
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
-
-typedef int (*example_ptr)(void);
-void build_examples(void);
-
+    typedef int (*example_ptr)(void);
+    void build_examples(void);
 
 #ifdef __cplusplus
 }
 #endif
-
 
 #endif

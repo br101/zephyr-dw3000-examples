@@ -8,22 +8,22 @@
  *
  *  @attention
  *
- *  Copyright 2019 - 2020 (c) Decawave Ltd, Dublin, Ireland.
+ *  Copyright 2019 - 2021 (c) Decawave Ltd, Dublin, Ireland.
  *
  *  All rights reserved.
  *
  *  @author Decawave
  */
-#include <string.h>
+#include "deca_probe_interface.h"
 #include <deca_device_api.h>
-#include <deca_regs.h>
 #include <deca_spi.h>
-#include <port.h>
 #include <example_selection.h>
+#include <port.h>
 #include <shared_defines.h>
+#include <shared_functions.h>
+#include <string.h>
 
 #include <math.h>
-
 
 #if defined(TEST_RX_TRIM)
 
@@ -34,23 +34,23 @@ extern void test_run_info(unsigned char *data);
 
 /* Default communication configuration. We use default non-STS DW mode. */
 static dwt_config_t config = {
-    5,               /* Channel number. */
-    DWT_PLEN_128,    /* Preamble length. Used in TX only. */
-    DWT_PAC8,        /* Preamble acquisition chunk size. Used in RX only. */
-    9,               /* TX preamble code. Used in TX only. */
-    9,               /* RX preamble code. Used in RX only. */
-    1,               /* 0 to use standard 8 symbol SFD, 1 to use non-standard 8 symbol, 2 for non-standard 16 symbol SFD and 3 for 4z 8 symbol SDF type */
-    DWT_BR_6M8,      /* Data rate. */
-    DWT_PHRMODE_STD, /* PHY header mode. */
-    DWT_PHRRATE_STD, /* PHY header rate. */
-    (129 + 8 - 8),   /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
+    5,                /* Channel number. */
+    DWT_PLEN_128,     /* Preamble length. Used in TX only. */
+    DWT_PAC8,         /* Preamble acquisition chunk size. Used in RX only. */
+    9,                /* TX preamble code. Used in TX only. */
+    9,                /* RX preamble code. Used in RX only. */
+    1,                /* 0 to use standard 8 symbol SFD, 1 to use non-standard 8 symbol, 2 for non-standard 16 symbol SFD and 3 for 4z 8 symbol SDF type */
+    DWT_BR_6M8,       /* Data rate. */
+    DWT_PHRMODE_STD,  /* PHY header mode. */
+    DWT_PHRRATE_STD,  /* PHY header rate. */
+    (129 + 8 - 8),    /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
     DWT_STS_MODE_OFF, /* STS disabled */
-    DWT_STS_LEN_64,/* STS length see allowed values in Enum dwt_sts_lengths_e */
-    DWT_PDOA_M0      /* PDOA mode off */
+    DWT_STS_LEN_64,   /* STS length see allowed values in Enum dwt_sts_lengths_e */
+    DWT_PDOA_M0       /* PDOA mode off */
 };
 
 /* Holds a Current Crystal Trimming Value, so that it can be examined at a debug breakpoint. */
-static int8_t uCurrentTrim_val;
+static uint8_t uCurrentTrim_val;
 
 /*
  * In this example, the crystal on the receiver will be trimmed to have a fixed offset with respect to the transmitter's crystal
@@ -61,25 +61,26 @@ static int8_t uCurrentTrim_val;
  * We recommend that (max-min >= 2).
  *
  * */
-# define TARGET_XTAL_OFFSET_VALUE_PPM_MIN    (2.0f)
-# define TARGET_XTAL_OFFSET_VALUE_PPM_MAX    (4.0f)
+#define TARGET_XTAL_OFFSET_VALUE_PPM_MIN (2.0f)
+#define TARGET_XTAL_OFFSET_VALUE_PPM_MAX (4.0f)
 
 /* The FS_XTALT_MAX_VAL defined the maximum value of the trimming value */
-#define FS_XTALT_MAX_VAL                    (XTAL_TRIM_BIT_MASK)
+#define FS_XTALT_MAX_VAL (XTAL_TRIM_BIT_MASK)
 
 /* The typical trimming range (with 4.7pF external caps is ~77ppm (-65ppm to +12ppm) over all steps, see DW3000 Datasheet */
-#define AVG_TRIM_PER_PPM                    ((FS_XTALT_MAX_VAL+1)/77.0f)
+#define AVG_TRIM_PER_PPM ((FS_XTALT_MAX_VAL + 1) / 77.0f)
 
 /**
  * Application entry point.
  */
 int rx_with_xtal_trim(void)
 {
-    uint8_t    rx_buffer[FRAME_LEN_MAX]; /* Buffer to store received frame. See NOTE 1 below. */
-    uint16_t   frame_len;
-    uint32_t   status_reg;
+    uint8_t rx_buffer[FRAME_LEN_MAX]; /* Buffer to store received frame. See NOTE 1 below. */
+    uint16_t frame_len;
+    uint32_t status_reg;
+    float trim_calc_val, offset_ppm_calc_val;
 
-    /* Configure SPI rate, DW3000 supports up to 38 MHz */
+    /* Configure SPI rate, DW3000 supports up to 36 MHz */
     port_set_dw_ic_spi_fastrate();
 
     /* Reset DW IC */
@@ -87,40 +88,43 @@ int rx_with_xtal_trim(void)
 
     Sleep(2); // Time needed for DW3000 to start up (transition from INIT_RC to IDLE_RC, or could wait for SPIRDY event)
 
-    while (!dwt_checkidlerc()) /* Need to make sure DW IC is in IDLE_RC before proceeding */
-    { };
+    /* Probe for the correct device driver. */
+    dwt_probe((struct dwt_probe_s *)&dw3000_probe_interf);
+
+    while (!dwt_checkidlerc()) /* Need to make sure DW IC is in IDLE_RC before proceeding */ { };
 
     if (dwt_initialise(DWT_DW_INIT) == DWT_ERROR)
     {
         test_run_info((unsigned char *)"INIT FAILED     ");
-        while (1)
-        { };
+        while (1) { };
     }
 
     /* Enabling LEDs here for debug so that for each RX-enable the D2 LED will flash on DW3000 red eval-shield boards. */
-    dwt_setleds(DWT_LEDS_ENABLE | DWT_LEDS_INIT_BLINK) ;
+    dwt_setleds(DWT_LEDS_ENABLE | DWT_LEDS_INIT_BLINK);
 
     /* Configure DW IC. */
-    if(dwt_configure(&config)) /* if the dwt_configure returns DWT_ERROR either the PLL or RX calibration has failed the host should reset the device */
+    /* if the dwt_configure returns DWT_ERROR either the PLL or RX calibration has failed the host should reset the device */
+    if (dwt_configure(&config))
     {
         test_run_info((unsigned char *)"CONFIG FAILED     ");
-        while (1)
-        { };
+        while (1) { };
     }
 
     /* Read the initial crystal trimming value. This needs to be done after dwt_initialise(), which sets up initial trimming code.*/
     uCurrentTrim_val = dwt_getxtaltrim();
+    trim_calc_val = (TARGET_XTAL_OFFSET_VALUE_PPM_MAX + TARGET_XTAL_OFFSET_VALUE_PPM_MIN) / 2;
+    offset_ppm_calc_val = CLOCK_OFFSET_PPM_TO_RATIO * 1e6;
 
     /* Loop forever receiving frames. */
     while (1)
     {
-        int     i;
+        int i;
 
         /* Clear local RX buffer to avoid having leftovers from previous receptions  This is not necessary but is included here to aid reading
          * the RX buffer.
          * This is a good place to put a breakpoint. Here (after first time through the loop) the local status register will be set for last event
          * and if a good receive has happened the data buffer will have the data in it, and frame_len will be set to the length of the RX frame. */
-        for (i = 0 ; i < FRAME_LEN_MAX; i++ )
+        for (i = 0; i < FRAME_LEN_MAX; i++)
         {
             rx_buffer[i] = 0;
         }
@@ -132,10 +136,9 @@ int rx_with_xtal_trim(void)
          * STATUS register is 5 bytes long but, as the event we are looking at is in the first byte of the register, we can use this simplest API
          * function to access it.
          * */
-        while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_ERR)))
-        { };
+        waitforsysstatus(&status_reg, NULL, (DWT_INT_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_ERR), 0);
 
-        if (status_reg & SYS_STATUS_RXFCG_BIT_MASK)
+        if (status_reg & DWT_INT_RXFCG_BIT_MASK)
         {
             /* Following code block is the example of reading received frame to the rx_buffer.
              * While this is not necessary to show the clock offset adjustment algorithm, in a real implementation it is obviously important
@@ -143,7 +146,7 @@ int rx_with_xtal_trim(void)
              * */
             {
                 /* A frame has been received, copy it to our local buffer. */
-                frame_len = dwt_read32bitreg(RX_FINFO_ID) & RX_FINFO_RXFLEN_BIT_MASK;
+                frame_len = dwt_getframelength();
                 if (frame_len <= FRAME_LEN_MAX)
                 {
                     dwt_readrxdata(rx_buffer, frame_len, 0);
@@ -155,13 +158,13 @@ int rx_with_xtal_trim(void)
              * before we trim our crystal to follow its clock.
              * */
             {
-                float    xtalOffset_ppm;
+                float xtalOffset_ppm;
 
                 /* Now we read the carrier frequency offset of the remote transmitter, and convert to Parts Per Million units (ppm).
                  * A positive value means the local RX clock is running faster than the remote transmitter's clock.
                  * For a valid result the clock offset should be read before the receiver is re-enabled.
                  */
-                xtalOffset_ppm = ((float)dwt_readclockoffset()) * CLOCK_OFFSET_PPM_TO_RATIO * 1e6;
+                xtalOffset_ppm = ((float)dwt_readclockoffset()) * offset_ppm_calc_val;
 
                 /* TESTING BREAKPOINT LOCATION #1 */
 
@@ -169,10 +172,9 @@ int rx_with_xtal_trim(void)
                  * (TARGET_XTAL_OFFSET_VALUE_PPM_MIN..TARGET_XTAL_OFFSET_VALUE_PPM_MAX) out of the transmitter's crystal frequency.
                  * This may be used in application, which require small offset to be present between ranging sides.
                  * */
-                if(fabs(xtalOffset_ppm) > TARGET_XTAL_OFFSET_VALUE_PPM_MAX ||
-                   fabs(xtalOffset_ppm) < TARGET_XTAL_OFFSET_VALUE_PPM_MIN)
+                if (fabs(xtalOffset_ppm) > TARGET_XTAL_OFFSET_VALUE_PPM_MAX || fabs(xtalOffset_ppm) < TARGET_XTAL_OFFSET_VALUE_PPM_MIN)
                 {
-                    uCurrentTrim_val -= ((TARGET_XTAL_OFFSET_VALUE_PPM_MAX + TARGET_XTAL_OFFSET_VALUE_PPM_MIN)/2 + xtalOffset_ppm) * AVG_TRIM_PER_PPM;
+                    uCurrentTrim_val -= (int8_t)((trim_calc_val + xtalOffset_ppm) * AVG_TRIM_PER_PPM);
                     uCurrentTrim_val &= FS_XTALT_MAX_VAL;
 
                     /* Configure new Crystal Offset value */
@@ -181,12 +183,12 @@ int rx_with_xtal_trim(void)
             }
 
             /* Clear good RX frame event in the DW3000 status register. */
-            dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG_BIT_MASK);
+            dwt_writesysstatuslo(DWT_INT_RXFCG_BIT_MASK);
         }
         else
         {
             /* Clear RX error events in the DW3000 status register. */
-            dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_ERR);
+            dwt_writesysstatuslo(SYS_STATUS_ALL_RX_ERR);
         }
     }
 }

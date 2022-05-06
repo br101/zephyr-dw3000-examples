@@ -4,19 +4,19 @@
  *
  * @attention
  *
- * Copyright 2015-2020 (c) Decawave Ltd, Dublin, Ireland.
+ * Copyright 2015 - 2021 (c) Decawave Ltd, Dublin, Ireland.
  *
  * All rights reserved.
  *
  * @author Decawave
  */
 
+#include "deca_probe_interface.h"
 #include <deca_device_api.h>
-#include <deca_regs.h>
 #include <deca_spi.h>
-#include <port.h>
 #include <example_selection.h>
-
+#include <port.h>
+#include <shared_functions.h>
 
 #if defined(TEST_TX_SLEEP_AUTO)
 
@@ -27,19 +27,19 @@ extern void test_run_info(unsigned char *data);
 
 /* Default communication configuration. We use default non-STS DW mode. */
 static dwt_config_t config = {
-        5,               /* Channel number. */
-        DWT_PLEN_128,    /* Preamble length. Used in TX only. */
-        DWT_PAC8,        /* Preamble acquisition chunk size. Used in RX only. */
-        9,               /* TX preamble code. Used in TX only. */
-        9,               /* RX preamble code. Used in RX only. */
-        1,               /* 0 to use standard 8 symbol SFD, 1 to use non-standard 8 symbol, 2 for non-standard 16 symbol SFD and 3 for 4z 8 symbol SDF type */
-        DWT_BR_6M8,      /* Data rate. */
-        DWT_PHRMODE_STD, /* PHY header mode. */
-        DWT_PHRRATE_STD, /* PHY header rate. */
-        (129 + 8 - 8),   /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
-        DWT_STS_MODE_OFF, /* STS disabled */
-        DWT_STS_LEN_64,/* STS length see allowed values in Enum dwt_sts_lengths_e */
-        DWT_PDOA_M0      /* PDOA mode off */
+    5,                /* Channel number. */
+    DWT_PLEN_128,     /* Preamble length. Used in TX only. */
+    DWT_PAC8,         /* Preamble acquisition chunk size. Used in RX only. */
+    9,                /* TX preamble code. Used in TX only. */
+    9,                /* RX preamble code. Used in RX only. */
+    1,                /* 0 to use standard 8 symbol SFD, 1 to use non-standard 8 symbol, 2 for non-standard 16 symbol SFD and 3 for 4z 8 symbol SDF type */
+    DWT_BR_6M8,       /* Data rate. */
+    DWT_PHRMODE_STD,  /* PHY header mode. */
+    DWT_PHRRATE_STD,  /* PHY header rate. */
+    (129 + 8 - 8),    /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
+    DWT_STS_MODE_OFF, /* STS disabled */
+    DWT_STS_LEN_64,   /* STS length see allowed values in Enum dwt_sts_lengths_e */
+    DWT_PDOA_M0       /* PDOA mode off */
 };
 
 /* The frame sent in this example is an 802.15.4e standard blink. It is a 12-byte frame composed of the following fields:
@@ -47,14 +47,12 @@ static dwt_config_t config = {
  *     - byte 1: sequence number, incremented for each new frame.
  *     - byte 2 -> 9: device ID, see NOTE 1 below.
  *     - byte 10/11: frame check-sum, automatically set by DW IC.  */
-static uint8_t tx_msg[] = {0xC5, 0, 'D', 'E', 'C', 'A', 'W', 'A', 'V', 'E', 0, 0};
+static uint8_t tx_msg[] = { 0xC5, 0, 'D', 'E', 'C', 'A', 'W', 'A', 'V', 'E', 0, 0 };
 /* Index to access to sequence number of the blink frame in the tx_msg array. */
 #define BLINK_FRAME_SN_IDX 1
 
 /* Inter-frame delay period, in milliseconds. */
 #define TX_DELAY_MS 1000
-
-
 
 /* Values for the PG_DELAY and TX_POWER registers reflect the bandwidth and power of the spectrum at the current
  * temperature. These values can be calibrated prior to taking reference measurements. See NOTE 3 below. */
@@ -69,7 +67,7 @@ int tx_sleep_auto(void)
     /* Display application name on LCD. */
     test_run_info((unsigned char *)APP_NAME);
 
-    /* Configure SPI rate, DW3000 supports up to 38 MHz */
+    /* Configure SPI rate, DW3000 supports up to 36 MHz */
     port_set_dw_ic_spi_fastrate();
 
     /* Reset DW IC */
@@ -77,46 +75,48 @@ int tx_sleep_auto(void)
 
     Sleep(2); // Time needed for DW3000 to start up (transition from INIT_RC to IDLE_RC, or could wait for SPIRDY event)
 
-    while (!dwt_checkidlerc()) /* Need to make sure DW IC is in IDLE_RC before proceeding */
-    { };
+    /* Probe for the correct device driver. */
+    dwt_probe((struct dwt_probe_s *)&dw3000_probe_interf);
+
+    while (!dwt_checkidlerc()) /* Need to make sure DW IC is in IDLE_RC before proceeding */ { };
 
     if (dwt_initialise(DWT_DW_INIT) == DWT_ERROR)
     {
         test_run_info((unsigned char *)"INIT FAILED");
-        while (1)
-        { };
+        while (1) { };
     }
 
     /* Configure DW IC. See NOTE 5 below. */
-    if(dwt_configure(&config)) /* if the dwt_configure returns DWT_ERROR either the PLL or RX calibration has failed the host should reset the device */
+    /* if the dwt_configure returns DWT_ERROR either the PLL or RX calibration has failed the host should reset the device */
+    if (dwt_configure(&config))
     {
         test_run_info((unsigned char *)"CONFIG FAILED     ");
-        while (1)
-        { };
+        while (1) { };
     }
 
     /* Configure the TX spectrum parameters (power, PG delay and PG count) */
     dwt_configuretxrf(&txconfig_options);
 
     /* Configure sleep and wake-up parameters. */
-    dwt_configuresleep(DWT_CONFIG, DWT_PRES_SLEEP | DWT_WAKE_WUP | DWT_SLP_EN);
+    /* DWT_PGFCAL is added to make sure receiver is re-enabled on wake. */
+    dwt_configuresleep(DWT_CONFIG | DWT_PGFCAL, DWT_PRES_SLEEP | DWT_WAKE_WUP | DWT_SLP_EN);
 
     /* Configure DW IC to automatically enter sleep mode after transmission of a frame. */
     dwt_entersleepaftertx(1);
 
-    reg = dwt_read32bitreg(SYS_STATUS_ID);
+    reg = dwt_readsysstatuslo();
 
     /* need to disable default interrupts, device will not go to sleep if interrupt line is high */
-    dwt_setinterrupt(SYS_ENABLE_LO_SPIRDY_ENABLE_BIT_MASK, 0, DWT_DISABLE_INT);
+    dwt_setinterrupt(DWT_INT_SPIRDY_BIT_MASK, 0, DWT_DISABLE_INT);
 
-    dwt_write32bitreg(SYS_STATUS_ID, reg); //clear interrupt/events
+    dwt_writesysstatuslo(reg); // clear interrupt/events
 
     /* Loop forever sending frames periodically. */
     while (1)
     {
         /* Write frame data to DW IC and prepare transmission. See NOTE 4 below. */
         dwt_writetxdata(sizeof(tx_msg), tx_msg, 0); /* Zero offset in TX buffer. */
-        dwt_writetxfctrl(sizeof(tx_msg), 0, 0); /* Zero offset in TX buffer, no ranging. */
+        dwt_writetxfctrl(sizeof(tx_msg), 0, 0);     /* Zero offset in TX buffer, no ranging. */
 
         /* Start transmission. */
         dwt_starttx(DWT_START_TX_IMMEDIATE);
@@ -134,8 +134,8 @@ int tx_sleep_auto(void)
 
         Sleep(2); // Time needed for DW3000 to start up (transition from INIT_RC to IDLE_RC, or could wait for SPIRDY event)
 
-        while (!dwt_checkidlerc()) /* Need to make sure DW IC is in IDLE_RC before proceeding */
-        { };
+        /* Need to make sure DW IC is in IDLE_RC before proceeding */
+        while (!dwt_checkidlerc()) { };
 
         /* Restore the required configurations on wake */
         dwt_restoreconfig();

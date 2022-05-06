@@ -4,21 +4,21 @@
  *
  * @attention
  *
- * Copyright 2019 - 2020 (c) Decawave Ltd, Dublin, Ireland.
+ * Copyright 2019 - 2021 (c) Decawave Ltd, Dublin, Ireland.
  *
  * All rights reserved.
  *
  * @author Decawave
  */
 
-#include <string.h>
+#include "deca_probe_interface.h"
 #include <deca_device_api.h>
-#include <deca_regs.h>
 #include <deca_spi.h>
+#include <example_selection.h>
 #include <port.h>
 #include <shared_defines.h>
-#include <example_selection.h>
-
+#include <shared_functions.h>
+#include <string.h>
 
 #if defined(TEST_SIMPLE_TX_STS_SDC)
 
@@ -29,19 +29,19 @@ extern void test_run_info(unsigned char *data);
 
 /* Default communication configuration. We use default non-STS DW mode. */
 static dwt_config_t config = {
-        5,               /* Channel number. */
-        DWT_PLEN_128,    /* Preamble length. Used in TX only. */
-        DWT_PAC8,        /* Preamble acquisition chunk size. Used in RX only. */
-        9,               /* TX preamble code. Used in TX only. */
-        9,               /* RX preamble code. Used in RX only. */
-        3,               /* 0 to use standard 8 symbol SFD, 1 to use non-standard 8 symbol, 2 for non-standard 16 symbol SFD and 3 for 4z 8 symbol SDF type */
-        DWT_BR_6M8,      /* Data rate. */
-        DWT_PHRMODE_STD, /* PHY header mode. */
-        DWT_PHRRATE_STD, /* PHY header rate. */
-        (129 + 8 - 8),   /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
-        DWT_STS_MODE_1 | DWT_STS_MODE_SDC,  /* Use STS. See NOTE 5 & 6 below. */
-        DWT_STS_LEN_64,  /* STS length see allowed values in Enum dwt_sts_lengths_e */
-        DWT_PDOA_M0      /* PDOA mode off */
+    5,               /* Channel number. */
+    DWT_PLEN_128,    /* Preamble length. Used in TX only. */
+    DWT_PAC8,        /* Preamble acquisition chunk size. Used in RX only. */
+    9,               /* TX preamble code. Used in TX only. */
+    9,               /* RX preamble code. Used in RX only. */
+    3,               /* 0 to use standard 8 symbol SFD, 1 to use non-standard 8 symbol, 2 for non-standard 16 symbol SFD and 3 for 4z 8 symbol SDF type */
+    DWT_BR_6M8,      /* Data rate. */
+    DWT_PHRMODE_STD, /* PHY header mode. */
+    DWT_PHRRATE_STD, /* PHY header rate. */
+    (129 + 8 - 8),   /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
+    DWT_STS_MODE_1 | DWT_STS_MODE_SDC, /* Use STS. See NOTE 5 & 6 below. */
+    DWT_STS_LEN_64,                    /* STS length see allowed values in Enum dwt_sts_lengths_e */
+    DWT_PDOA_M0                        /* PDOA mode off */
 };
 
 /* The frame sent in this example is a data frame encoded as per the IEEE 802.15.4-2011 standard. It is a 27-byte frame composed of the following
@@ -64,12 +64,12 @@ static dwt_config_t config = {
  *     - byte 7/8: source address, see NOTE 8 below.
  *     - byte 9 to 24: MAC payload, see NOTE 7 below.
  *     - byte 25/26: frame check-sum, automatically set by DW IC. */
-static uint8_t tx_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'X', 'R', 'X', 'T', 'D', 'A', 'T', 'A', 0, 0};
+static uint8_t tx_msg[] = { 0x41, 0x88, 0, 0xCA, 0xDE, 'X', 'R', 'X', 'T', 'D', 'A', 'T', 'A', 0, 0 };
 /* Index to access the sequence number of the data frame in the tx_msg array. */
-#define FRAME_SN_IDX 2
+#define FRAME_SN_IDX      2
 #define FRAME_PAYLOAD_IDX 9
 
-#define FRAME_LENGTH    (sizeof(tx_msg)+FCS_LEN) //The real length that is going to be transmitted
+#define FRAME_LENGTH (sizeof(tx_msg) + FCS_LEN) // The real length that is going to be transmitted
 
 /* Inter-frame delay period, in milliseconds. */
 #define TX_DELAY_MS 500
@@ -77,7 +77,6 @@ static uint8_t tx_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'X', 'R', 'X', 'T', 'D', '
 /* Values for the PG_DELAY and TX_POWER registers reflect the bandwidth and power of the spectrum at the current
  * temperature. These values can be calibrated prior to taking reference measurements. See NOTE 2 below. */
 extern dwt_txconfig_t txconfig_options;
-
 
 /**
  * Application entry point.
@@ -87,7 +86,7 @@ int simple_tx_sts_sdc(void)
     /* Display application name on LCD. */
     test_run_info((unsigned char *)APP_NAME);
 
-    /* Configure SPI rate, DW3000 supports up to 38 MHz */
+    /* Configure SPI rate, DW3000 supports up to 36 MHz */
     port_set_dw_ic_spi_fastrate();
 
     /* Reset DW IC */
@@ -95,25 +94,26 @@ int simple_tx_sts_sdc(void)
 
     Sleep(2); // Time needed for DW3000 to start up (transition from INIT_RC to IDLE_RC
 
-    while (!dwt_checkidlerc()) /* Need to make sure DW IC is in IDLE_RC before proceeding */
-    { };
+    /* Probe for the correct device driver. */
+    dwt_probe((struct dwt_probe_s *)&dw3000_probe_interf);
+
+    while (!dwt_checkidlerc()) /* Need to make sure DW IC is in IDLE_RC before proceeding */ { };
 
     if (dwt_initialise(DWT_DW_INIT) == DWT_ERROR)
     {
         test_run_info((unsigned char *)"INIT FAILED     ");
-        while (1)
-        { };
+        while (1) { };
     }
 
     /* Enabling LEDs here for debug so that for each TX the D1 LED will flash on DW3000 red eval-shield boards. */
-    dwt_setleds(DWT_LEDS_ENABLE | DWT_LEDS_INIT_BLINK) ;
+    dwt_setleds(DWT_LEDS_ENABLE | DWT_LEDS_INIT_BLINK);
 
     /* Configure DW IC. See NOTE 9 below. */
-    if(dwt_configure(&config)) /* if the dwt_configure returns DWT_ERROR either the PLL or RX calibration has failed the host should reset the device */
+    /* if the dwt_configure returns DWT_ERROR either the PLL or RX calibration has failed the host should reset the device */
+    if (dwt_configure(&config))
     {
         test_run_info((unsigned char *)"CONFIG FAILED     ");
-        while (1)
-        { };
+        while (1) { };
     }
 
     /* Configure the TX spectrum parameters (power, PG delay and PG count) */
@@ -122,12 +122,11 @@ int simple_tx_sts_sdc(void)
     /* can enable TX/RX states output on GPIOs 5 and 6 to help debug */
     dwt_setlnapamode(DWT_LNA_ENABLE | DWT_PA_ENABLE);
 
-
     /* Loop forever sending frames periodically. */
-    while(1)
+    while (1)
     {
         /* Write frame data to DW IC and prepare transmission. See NOTE 3 below.*/
-        dwt_writetxdata(FRAME_LENGTH-FCS_LEN, tx_msg, 0); /* Zero offset in TX buffer. */
+        dwt_writetxdata(FRAME_LENGTH - FCS_LEN, tx_msg, 0); /* Zero offset in TX buffer. */
 
         /*
          * In this example, since the length of the transmitted frame does not change,
@@ -141,11 +140,10 @@ int simple_tx_sts_sdc(void)
         /* Poll DW IC until TX frame sent event set. See NOTE 4 below.
          * STATUS register is 4 bytes long but, as the event we are looking at is in the first byte of the register, we can use this simplest API
          * function to access it.*/
-        while (!(dwt_read32bitreg(SYS_STATUS_ID) & SYS_STATUS_TXFRS_BIT_MASK))
-        { };
+        waitforsysstatus(NULL, NULL, DWT_INT_TXFRS_BIT_MASK, 0);
 
         /* Clear TX frame sent event. */
-        dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);
+        dwt_writesysstatuslo(DWT_INT_TXFRS_BIT_MASK);
 
         /* Execute a delay between transmissions. */
         Sleep(TX_DELAY_MS);

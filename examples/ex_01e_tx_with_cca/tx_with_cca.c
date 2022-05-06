@@ -23,19 +23,19 @@
  *           used here matches that of CF example.
  * @attention
  *
- * Copyright 2019 - 2020 (c) Decawave Ltd, Dublin, Ireland.
+ * Copyright 2019 - 2021 (c) Decawave Ltd, Dublin, Ireland.
  *
  * All rights reserved.
  *
  * @author Decawave
  */
+#include "deca_probe_interface.h"
 #include <deca_device_api.h>
-#include <deca_regs.h>
 #include <deca_spi.h>
+#include <example_selection.h>
 #include <port.h>
 #include <shared_defines.h>
-#include <example_selection.h>
-
+#include <shared_functions.h>
 
 #if defined(TEST_TX_WITH_CCA)
 
@@ -46,19 +46,19 @@ extern void test_run_info(unsigned char *data);
 
 /* Default communication configuration. We use default non-STS DW mode. */
 static dwt_config_t config = {
-    5,               /* Channel number. */
-    DWT_PLEN_128,    /* Preamble length. Used in TX only. */
-    DWT_PAC8,        /* Preamble acquisition chunk size. Used in RX only. */
-    9,               /* TX preamble code. Used in TX only. */
-    9,               /* RX preamble code. Used in RX only. */
-    1,               /* 0 to use standard 8 symbol SFD, 1 to use non-standard 8 symbol, 2 for non-standard 16 symbol SFD and 3 for 4z 8 symbol SDF type */
-    DWT_BR_6M8,      /* Data rate. */
-    DWT_PHRMODE_STD, /* PHY header mode. */
-    DWT_PHRRATE_STD, /* PHY header rate. */
-    (129 + 8 - 8),   /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
+    5,                /* Channel number. */
+    DWT_PLEN_128,     /* Preamble length. Used in TX only. */
+    DWT_PAC8,         /* Preamble acquisition chunk size. Used in RX only. */
+    9,                /* TX preamble code. Used in TX only. */
+    9,                /* RX preamble code. Used in RX only. */
+    1,                /* 0 to use standard 8 symbol SFD, 1 to use non-standard 8 symbol, 2 for non-standard 16 symbol SFD and 3 for 4z 8 symbol SDF type */
+    DWT_BR_6M8,       /* Data rate. */
+    DWT_PHRMODE_STD,  /* PHY header mode. */
+    DWT_PHRRATE_STD,  /* PHY header rate. */
+    (129 + 8 - 8),    /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
     DWT_STS_MODE_OFF, /* STS disabled */
-    DWT_STS_LEN_64,/* STS length see allowed values in Enum dwt_sts_lengths_e */
-    DWT_PDOA_M0      /* PDOA mode off */
+    DWT_STS_LEN_64,   /* STS length see allowed values in Enum dwt_sts_lengths_e */
+    DWT_PDOA_M0       /* PDOA mode off */
 };
 
 /* The frame sent in this example is an 802.15.4 standard blink. It is a 12-byte frame composed of the following fields:
@@ -66,25 +66,23 @@ static dwt_config_t config = {
  *     - byte 1: sequence number, incremented for each new frame.
  *     - byte 2 -> 9: device ID, see NOTE 2 below.
  *     - byte 10/11: frame check-sum, automatically set/added by DW3000.  */
-static uint8_t tx_msg[] = {0xC5, 0, 'D', 'E', 'C', 'A', 'W', 'A', 'V', 'E'};
+static uint8_t tx_msg[] = { 0xC5, 0, 'D', 'E', 'C', 'A', 'W', 'A', 'V', 'E' };
 /* Index to access to sequence number of the blink frame in the tx_msg array. */
 #define BLINK_FRAME_SN_IDX 1
 
-#define FRAME_LENGTH    (sizeof(tx_msg)+FCS_LEN) /* The real length that is going to be transmitted */
+#define FRAME_LENGTH (sizeof(tx_msg) + FCS_LEN) /* The real length that is going to be transmitted */
 
 /* Inter-frame delay period, in milliseconds.
  * this example will try to transmit a frame every 100 ms*/
 #define TX_DELAY_MS 100
 
 /* initial backoff period when failed to transmit a frame due to preamble detection */
-#define INITIAL_BACKOFF_PERIOD 400 /* This constant would normally smaller (e.g. 1ms), however here it is set to 400 ms so that
-                                    * user can see (on LCD) the report that the CCA detects a preamble on the air occasionally.
-                                    * and is doing a TX back-off.
-                                    */
+/* This constant would normally smaller (e.g. 1ms), however here it is set to 400 ms so that user can see (on LCD) the report that the CCA detects a preamble on
+ * the air occasionally and is doing a TX back-off. */
+#define INITIAL_BACKOFF_PERIOD 400
 
-int tx_sleep_period; /* Sleep period until the next TX attempt */
+int tx_sleep_period;                                /* Sleep period until the next TX attempt */
 int next_backoff_interval = INITIAL_BACKOFF_PERIOD; /* Next backoff in the event of busy channel detection by this pseudo CCA algorithm */
-
 
 /* holds copy of status register */
 uint32_t status_reg = 0;
@@ -93,7 +91,6 @@ uint32_t status_regh = 0; /* holds the high 32 bits of SYS_STATUS_HI */
 /* Values for the PG_DELAY and TX_POWER registers reflect the bandwidth and power of the spectrum at the current
  * temperature. These values can be calibrated prior to taking reference measurements. See NOTE 3 below. */
 extern dwt_txconfig_t txconfig_options;
-
 
 /**
  * Application entry point.
@@ -104,7 +101,7 @@ int tx_with_cca(void)
     /* Display application name on LCD. */
     test_run_info((unsigned char *)APP_NAME);
 
-    /* Configure SPI rate, DW3000 supports up to 38 MHz */
+    /* Configure SPI rate, DW3000 supports up to 36 MHz */
     port_set_dw_ic_spi_fastrate();
 
     /* Reset DW IC */
@@ -112,25 +109,26 @@ int tx_with_cca(void)
 
     Sleep(2); // Time needed for DW3000 to start up (transition from INIT_RC to IDLE_RC, or could wait for SPIRDY event)
 
-    while (!dwt_checkidlerc()) /* Need to make sure DW IC is in IDLE_RC before proceeding */
-    { };
+    /* Probe for the correct device driver. */
+    dwt_probe((struct dwt_probe_s *)&dw3000_probe_interf);
+
+    while (!dwt_checkidlerc()) /* Need to make sure DW IC is in IDLE_RC before proceeding */ { };
 
     if (dwt_initialise(DWT_DW_INIT) == DWT_ERROR)
     {
         test_run_info((unsigned char *)"INIT FAILED     ");
-        while (1)
-        { };
+        while (1) { };
     }
 
     /* Enabling LEDs here for debug so that for each TX the D1 LED will flash on DW3000 red eval-shield boards. */
-    dwt_setleds(DWT_LEDS_ENABLE | DWT_LEDS_INIT_BLINK) ;
+    dwt_setleds(DWT_LEDS_ENABLE | DWT_LEDS_INIT_BLINK);
 
     /* Configure DW IC. See NOTE 7 below. */
-    if(dwt_configure(&config)) /* if the dwt_configure returns DWT_ERROR either the PLL or RX calibration has failed the host should reset the device */
+    /* if the dwt_configure returns DWT_ERROR either the PLL or RX calibration has failed the host should reset the device */
+    if (dwt_configure(&config))
     {
         test_run_info((unsigned char *)"CONFIG FAILED     ");
-        while (1)
-        { };
+        while (1) { };
     }
 
     /* Configure the TX spectrum parameters (power, PG delay and PG count) */
@@ -140,32 +138,22 @@ int tx_with_cca(void)
     dwt_setpreambledetecttimeout(3);
 
     /* Loop forever sending frames periodically. */
-    while(1)
+    while (1)
     {
-        /* local variables for LCD output, this holds the result of the most recent channel assessment y pseudo CCA algorithm,
-        * 1 (channel is clear) or 0 (preamble was detected) */
-//        int channel_clear;
-
         /* Write frame data to DW3000 and prepare transmission. See NOTE 5 below.*/
         dwt_writetxdata(FRAME_LENGTH - FCS_LEN, tx_msg, 0); /* Zero offset in TX buffer. */
-        dwt_writetxfctrl(FRAME_LENGTH, 0, 0); /* Zero offset in TX buffer, no ranging. */
+        dwt_writetxfctrl(FRAME_LENGTH, 0, 0);               /* Zero offset in TX buffer, no ranging. */
 
         /* Start transmission with CCA. The transmission will only start once there is no preamble detected within 3 PACs as defined above
          * e.g. once we get the preamble timeout or TX will be canceled if a preamble is detected. */
         dwt_starttx(DWT_START_TX_CCA);
 
         /* Poll DW3000 until either TX complete or CCA_FAIL. See NOTE 6 below. */
-        while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & SYS_STATUS_TXFRS_BIT_MASK))
-        {
-            if((status_regh = dwt_read32bitreg(SYS_STATUS_HI_ID))& SYS_STATUS_HI_CCA_FAIL_BIT_MASK)
-                break;
-        }
+        waitforsysstatus(&status_reg, &status_regh, DWT_INT_TXFRS_BIT_MASK, DWT_INT_HI_CCA_FAIL_BIT_MASK);
 
-        if (status_reg & SYS_STATUS_TXFRS_BIT_MASK)
+        if (status_reg & DWT_INT_TXFRS_BIT_MASK)
         {
-//            channel_clear = 1;
-
-            tx_sleep_period = TX_DELAY_MS; /* sent a frame - set interframe period */
+            tx_sleep_period = TX_DELAY_MS;                  /* sent a frame - set interframe period */
             next_backoff_interval = INITIAL_BACKOFF_PERIOD; /* set initial backoff period */
             /* Increment the blink frame sequence number (modulo 256). */
             tx_msg[BLINK_FRAME_SN_IDX]++;
@@ -175,15 +163,15 @@ int tx_with_cca(void)
             /* if DW IC detected the preamble, device will be in IDLE */
 
             tx_sleep_period = next_backoff_interval; /* set the TX sleep period */
-            next_backoff_interval++; /* If failed to transmit, increase backoff and try again.
-                               * In a real implementation the back-off is typically a randomised period
-                               * whose range is an exponentially related to the number of successive failures.
-                               * See https://en.wikipedia.org/wiki/Exponential_backoff */
-//            channel_clear = 0;
+            /* If failed to transmit, increase backoff and try again.
+             * In a real implementation the back-off is typically a randomised period
+             * whose range is an exponentially related to the number of successive failures.
+             * See https://en.wikipedia.org/wiki/Exponential_backoff */
+            next_backoff_interval++;
         }
 
         /* Clear TX frame sent event. */
-        dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);
+        dwt_writesysstatuslo(DWT_INT_TXFRS_BIT_MASK);
 
         /* Execute a delay between transmissions. */
         Sleep(tx_sleep_period);
@@ -201,11 +189,11 @@ int tx_with_cca(void)
  *    is initiated, otherwise we defer the transmission typically for a random back-off period after which transmission is again attempted with CCA.
  *    Note: we return to idle for the back-off period and do not receive the frame whose preamble was detected, since the MAC (and upper layer) wants
  *    to transmit and not receive at this time.
- *    This example has been designed to operate with example 4b - Continuous Frame. The 4b device will fill the air with frames which will be detected by the CCA
- *    and thus the CCA will cancel the transmission and will use back off to try sending again at later stage.
- *    This example will actually get to send when the CCA preamble detection overlaps with the data portion of the continuous TX or inter frame period,
- *    Note the Continuous Frame example actually stops after 30s interval (thus the user should toggle the reset button on the unit running example 4b
- *    to restart it if they wish to continue observing this pseudo CCA experiencing an environment of high air-utilisation).
+ *    This example has been designed to operate with example 4b - Continuous Frame. The 4b device will fill the air with frames which will be detected
+ *    by the CCA and thus the CCA will cancel the transmission and will use back off to try sending again at later stage. This example will actually
+ *    get to send when the CCA preamble detection overlaps with the data portion of the continuous TX or inter frame period, Note the Continuous Frame
+ *    example actually stops after 30s interval (thus the user should toggle the reset button on the unit running example 4b to restart it if they wish
+ *    to continue observing this pseudo CCA experiencing an environment of high air-utilisation).
  * 2. The device ID is a hard coded constant in the blink to keep the example simple but for a real product every device should have a unique ID.
  *    For development purposes it is possible to generate a DW3000 unique ID by combining the Lot ID & Part Number values programmed into the
  *    DW3000 during its manufacture. However there is no guarantee this will not conflict with someone else’s implementation. We recommended that
@@ -216,8 +204,8 @@ int tx_with_cca(void)
  *    when is different for different preamble configurations, as per User Manual guidelines.
  * 5. dwt_writetxdata() takes the tx_msg buffer and copies it into devices TX buffer memory, the two byte check-sum at the end of the frame is
  *    automatically appended by the DW3000, thus the dwt_writetxfctrl() should be given the total length.
- * 6. We use polled mode of operation here to keep the example as simple as possible, but the TXFRS and CCA_FAIL status events can be used to generate an interrupt.
- *    Please refer to DW3000 User Manual for more details on "interrupts".
+ * 6. We use polled mode of operation here to keep the example as simple as possible, but the TXFRS and CCA_FAIL status events can be used to generate
+ *    an interrupt. Please refer to DW3000 User Manual for more details on "interrupts".
  * 7. Desired configuration by user may be different to the current programmed configuration. dwt_configure is called to set desired
  *    configuration.
  ****************************************************************************************************************************************************/
