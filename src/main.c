@@ -24,9 +24,8 @@ void main(void)
 	dw3000_init();
 	dw3000_hw_reset();
 
-	printk("XX\n");
 	build_examples();
-	printk("XXX\n");
+
 	if (example_pointer != NULL) {
 		example_pointer();
 	} else {

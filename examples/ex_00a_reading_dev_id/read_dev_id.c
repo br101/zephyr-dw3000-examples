@@ -39,18 +39,13 @@ int read_dev_id(void)
     /* Configure SPI rate, DW3000 supports up to 36 MHz */
     port_set_dw_ic_spi_fastrate();
 
-    printk("Z 1\n");
-
     /* Reset DW IC */
     reset_DWIC(); /* Target specific drive of RSTn line into DW IC low for a period. */
-
-    printk("Z 2\n");
 
     Sleep(2); // Time needed for DW3000 to start up (transition from INIT_RC to IDLE_RC, or could wait for SPIRDY event)
 
     /* Probe for the correct device driver. */
-    int a = dwt_probe((struct dwt_probe_s *)&dw3000_probe_interf);
-    printk("probe %d\n", a);
+    dwt_probe((struct dwt_probe_s *)&dw3000_probe_interf);
 
     dev_id = dwt_readdevid();
 
