@@ -10,6 +10,9 @@ list(APPEND ZEPHYR_EXTRA_MODULES ${CMAKE_CURRENT_SOURCE_DIR}/dw3000-decadriver/)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(dw3000-examples)
 
+# the binary only library from Qorvo has problems with -Os or -O2
+zephyr_library_compile_options(-O1)
+
 ## example selection (select one of below) by calling cmake -DEXAMPLE=NAME
 ## or by uncommenting ONE add_definitions() below
 if (DEFINED EXAMPLE)
