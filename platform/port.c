@@ -1,7 +1,8 @@
 #include <zephyr.h>
 
 #include <deca_device_api.h>
-#include <dw3000.h>
+#include <dw3000_hw.h>
+#include <dw3000_spi.h>
 #include <port.h>
 
 int reset_semaphore;
@@ -34,5 +35,5 @@ void port_set_dw_ic_spi_fastrate(void)
 
 void port_set_dwic_isr(port_deca_isr_t deca_isr)
 {
-	dw3000_init_interrupt();
+	dw3000_hw_init_interrupt();
 }

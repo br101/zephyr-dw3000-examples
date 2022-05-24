@@ -14,7 +14,6 @@
 #ifndef _DECA_SPI_H_
 #define _DECA_SPI_H_
 
+// this file is only needed because some examples include it
+
 #endif /* _DECA_SPI_H_ */
-
-
-
