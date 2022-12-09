@@ -6,6 +6,15 @@ It uses the Zephyr DW3000 driver from https://github.com/br101/zephyr-dw3000-dec
 as a git submodule and otherwise tries to make the least amount of changes to the examples
 from the original code (the rationale is that they will be updated).
 
+
+As in https://github.com/br101/zephyr-dw3000-decadriver, there are two branches:
+
+* The 'master' branch uses the last release from Qorvo (DW3xxx_XR6.0C_24Feb2022.zip), which
+unfortunately uses the binary-only library for the driver.
+
+* There is an 'opensource' branch which uses the code from the last open source release from Qorvo 
+(DWS3000_Release_v1.1 / DW3000_API_C0_rev4p0), but this is older and not well tested any more.
+
 The example to be executed can be selected by passing a variable to cmake, e.g.:
 ```
 cmake -B build -DBOARD_ROOT=. -DBOARD=minew_ms151f7 -DEXAMPLE=EXAMPLE_NAME  .
